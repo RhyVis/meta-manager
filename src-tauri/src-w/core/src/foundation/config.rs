@@ -1,24 +1,10 @@
 use crate::util::file::cd_with;
 use config::{Config, FileFormat};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 use std::sync::{OnceLock, RwLock, RwLockReadGuard};
 use thiserror::Error;
-use tracing::error;
-
-/// Configuration for the application
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct AppConfig {
-    #[serde(default)]
-    pub data_dir: String,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            data_dir: "data".to_string(),
-        }
-    }
-}
+use tracing::{debug, error};
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
@@ -38,9 +24,40 @@ pub enum ConfigError {
     LockError,
 }
 
+/// Configuration for the application
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct AppConfig {
+    data_dir: String,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        AppConfig {
+            data_dir: "data".to_string(),
+        }
+    }
+}
+
+impl AppConfig {
+    pub fn data_dir(&self) -> PathBuf {
+        cd_with(&self.data_dir)
+    }
+
+    pub fn check(&self) -> anyhow::Result<()> {
+        if !self.data_dir().exists() {
+            debug!(
+                "Data directory '{}' does not exist, creating it",
+                &self.data_dir().display()
+            );
+            std::fs::create_dir_all(self.data_dir())?;
+        }
+        Ok(())
+    }
+}
+
 fn config() -> &'static RwLock<AppConfig> {
     static CONFIG: OnceLock<RwLock<AppConfig>> = OnceLock::new();
-    CONFIG.get_or_init(|| RwLock::new(load().unwrap_or(AppConfig::default())))
+    CONFIG.get_or_init(|| RwLock::new(AppConfig::default()))
 }
 
 fn load() -> Result<AppConfig, ConfigError> {
@@ -55,6 +72,7 @@ fn load() -> Result<AppConfig, ConfigError> {
                 .separator("__")
                 .list_separator(" "),
         )
+        .set_default("data_dir", "data")?
         .build()
     {
         Ok(raw) => match raw.try_deserialize::<AppConfig>() {
@@ -89,6 +107,11 @@ pub fn reload() -> Result<(), ConfigError> {
             Err(ConfigError::LockError)
         }
     }
+}
+
+pub fn init_once_only() -> anyhow::Result<()> {
+    reload()?;
+    get_clone()?.check()
 }
 
 /// Save the config to the default file

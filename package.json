@@ -19,8 +19,10 @@
   "dependencies": {
     "@quasar/extras": "^1.16.17",
     "@tauri-apps/api": "^2.5.0",
+    "@tauri-apps/plugin-dialog": "~2",
     "@tauri-apps/plugin-opener": "^2.2.6",
     "@vueuse/core": "^13.1.0",
+    "lodash-es": "^4.17.21",
     "pinia": "^3.0.1",
     "quasar": "^2.18.1",
     "vue": "^3.5.13",
@@ -31,6 +33,7 @@
     "@tauri-apps/cli": "^2.5.0",
     "@tsconfig/node22": "^22.0.1",
     "@types/jsdom": "^21.1.7",
+    "@types/lodash-es": "^4.17.12",
     "@types/node": "^22.14.0",
     "@vitejs/plugin-vue": "^5.2.3",
     "@vitejs/plugin-vue-jsx": "^4.1.2",

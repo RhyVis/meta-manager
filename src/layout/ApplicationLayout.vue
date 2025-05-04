@@ -13,7 +13,7 @@ const [drawerOpen, setDrawerOpen] = useToggle(false);
       </q-toolbar>
     </q-header>
     <q-drawer v-model="drawerOpen">
-      <div>Test Empty!</div>
+      <q-btn to="dashboard">Switch Test</q-btn>
     </q-drawer>
     <q-page-container id="main-container">
       <RouterView />

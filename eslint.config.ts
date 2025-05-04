@@ -1,9 +1,9 @@
-import { globalIgnores } from 'eslint/config'
-import { defineConfigWithVueTs, vueTsConfigs } from '@vue/eslint-config-typescript'
-import pluginVue from 'eslint-plugin-vue'
-import pluginVitest from '@vitest/eslint-plugin'
-import pluginOxlint from 'eslint-plugin-oxlint'
-import skipFormatting from '@vue/eslint-config-prettier/skip-formatting'
+import { globalIgnores } from "eslint/config";
+import { defineConfigWithVueTs, vueTsConfigs } from "@vue/eslint-config-typescript";
+import pluginVue from "eslint-plugin-vue";
+import pluginVitest from "@vitest/eslint-plugin";
+import pluginOxlint from "eslint-plugin-oxlint";
+import skipFormatting from "@vue/eslint-config-prettier/skip-formatting";
 
 // To allow more languages other than `ts` in `.vue` files, uncomment the following lines:
 // import { configureVueProject } from '@vue/eslint-config-typescript'
@@ -12,19 +12,37 @@ import skipFormatting from '@vue/eslint-config-prettier/skip-formatting'
 
 export default defineConfigWithVueTs(
   {
-    name: 'app/files-to-lint',
-    files: ['**/*.{ts,mts,tsx,vue}'],
+    name: "app/files-to-lint",
+    files: ["**/*.{ts,mts,tsx,vue}"],
   },
 
-  globalIgnores(['**/dist/**', '**/dist-ssr/**', '**/coverage/**']),
+  globalIgnores(["**/dist/**", "**/dist-ssr/**", "**/coverage/**"]),
 
-  pluginVue.configs['flat/essential'],
+  pluginVue.configs["flat/essential"],
   vueTsConfigs.recommended,
-  
+
+  {
+    name: "app/various-lang",
+    rules: {
+      "vue/block-lang": [
+        "error",
+        {
+          script: {
+            lang: ["ts", "tsx"],
+          },
+          style: {
+            lang: ["sass", "css"],
+          },
+        },
+      ],
+      "vue/multi-word-component-names": "off",
+    },
+  },
+
   {
     ...pluginVitest.configs.recommended,
-    files: ['src/**/__tests__/*'],
+    files: ["src/**/__tests__/*"],
   },
-  ...pluginOxlint.configs['flat/recommended'],
+  ...pluginOxlint.configs["flat/recommended"],
   skipFormatting,
-)
+);

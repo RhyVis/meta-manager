@@ -8,13 +8,17 @@ import quasarLang from "quasar/lang/zh-CN";
 import App from "@/App.vue";
 import router from "@/router";
 import store from "@/stores";
-import { Quasar } from "quasar";
+import { Notify, Dialog, Quasar } from "quasar";
 
 console.log("Application Loaded");
 
 const app = createApp(App);
 
 app.use(Quasar, {
+  plugins: {
+    Notify,
+    Dialog,
+  },
   lang: quasarLang,
 });
 app.use(store);
