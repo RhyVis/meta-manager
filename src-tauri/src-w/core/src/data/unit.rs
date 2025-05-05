@@ -76,7 +76,7 @@ pub struct GameMetadata {
     #[builder(default)]
     pub publisher: Option<String>,
     #[builder(default)]
-    pub release_date: Option<DateTime<Utc>>,
+    pub release_date: Option<String>,
 
     #[builder(default)]
     pub archive_path: Option<String>,

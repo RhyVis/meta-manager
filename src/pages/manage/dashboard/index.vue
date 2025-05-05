@@ -39,6 +39,23 @@ const visibleColumns = ref(["title", "platform", "size", "actions"]);
 const pagination = ref({ rowsPerPage: 10 });
 const { lib } = storeToRefs(libraryStore);
 
+const searchText = ref("");
+const filteredEntries = computed(() => {
+  if (!searchText.value) return lib.value?.entries ?? [];
+  const search = searchText.value.toLowerCase();
+  return lib.value?.entries.filter(item => {
+    return (
+      (item.title?.toLowerCase().includes(search)) ||
+      (item.original_title?.toLowerCase().includes(search)) ||
+      (item.platform.platform?.toLowerCase().includes(search)) ||
+      (item.platform.id?.toLowerCase().includes(search)) ||
+      (item.platform_id?.toLowerCase().includes(search)) ||
+      (item.developer?.toLowerCase().includes(search)) ||
+      (item.publisher?.toLowerCase().includes(search))
+    );
+  }) ?? [];
+});
+
 const openFileDialog = async () => {
   try {
     const selected = await open({
@@ -247,7 +264,7 @@ onMounted(() => {
   <div class="q-pa-md col">
     <!-- 标题栏 -->
     <div class="row items-center q-mb-md">
-      <h5 class="q-my-none">游戏库管理</h5>
+      <h5 class="q-my-none">元数据库</h5>
       <q-space />
     </div>
 
@@ -263,28 +280,45 @@ onMounted(() => {
       <q-btn color="secondary" icon="add" label="添加元数据" @click="setSubmitDialog(true)" />
     </div>
 
-    <!-- 列显示控制 -->
-    <q-btn color="secondary" icon="view_column" flat>
-      <q-menu>
-        <q-list dense style="min-width: 200px">
-          <q-item
-            tag="label"
-            v-for="column in dashboardColumns.filter(
-              (col) => col.name != 'title' && col.name != 'actions',
-            )"
-            :key="column.name"
-          >
-            <q-item-section>
-              <q-checkbox v-model="visibleColumns" :val="column.name" :label="column.label" />
-            </q-item-section>
-          </q-item>
-        </q-list>
-      </q-menu>
-    </q-btn>
+    <!-- 控制区域 -->
+    <div class="row items-center q-mb-md q-gutter-sm">
+      <!-- 搜索输入框 -->
+      <q-input
+        v-model="searchText"
+        dense
+        outlined
+        placeholder="搜索游戏（标题、原始标题、平台ID、开发者、发行商）"
+        class="col-grow"
+        clearable
+      >
+        <template v-slot:prepend>
+          <q-icon name="search" />
+        </template>
+      </q-input>
+
+      <!-- 列显示控制按钮 -->
+      <q-btn color="blue-grey" icon="view_column" outline>
+        <q-menu>
+          <q-list dense style="min-width: 200px">
+            <q-item
+              tag="label"
+              v-for="column in dashboardColumns.filter(
+            (col) => col.name != 'title' && col.name != 'actions',
+          )"
+              :key="column.name"
+            >
+              <q-item-section>
+                <q-checkbox v-model="visibleColumns" :val="column.name" :label="column.label" />
+              </q-item-section>
+            </q-item>
+          </q-list>
+        </q-menu>
+      </q-btn>
+    </div>
 
     <!-- 表格区域 -->
     <q-table
-      :rows="lib?.entries || []"
+      :rows="filteredEntries"
       :columns="dashboardColumns"
       :visible-columns="visibleColumns"
       :loading="loading"

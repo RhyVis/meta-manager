@@ -10,6 +10,7 @@ import {
 import { useLibraryStore } from "@/stores/library.ts";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { useToggle } from "@vueuse/core";
+import dayjs from "dayjs";
 import { cloneDeep } from "lodash-es";
 import { useQuasar } from "quasar";
 import { computed, ref, watch } from "vue";
@@ -47,6 +48,7 @@ const editFields = ref({
   developer: { state: false, cache: "" },
   publisher: { state: false, cache: "" },
   archive_password: { state: false, cache: "" },
+  release_date: { state: false, cache: "" },
 });
 const platformProxy = computed({
   get: () => editedData.value.platform?.platform || "Unknown!",
@@ -340,23 +342,28 @@ watch(
               </template>
             </q-input>
 
-            <q-field v-if="!editFields.description.state" dense label="描述" stack-label>
-              <template #control>
-                <div class="self-center full-width no-outline">
-                  {{ metadata.description || "-" }}
-                </div>
-              </template>
+            <q-input
+              v-if="!editFields.description.state"
+              dense
+              label="描述"
+              type="textarea"
+              autogrow
+              readonly
+              stack-label
+              :model-value="metadata.description || '-'"
+            >
               <template #append>
                 <q-btn icon="edit" flat round dense @click="toggleEditField('description')" />
               </template>
-            </q-field>
+            </q-input>
             <q-input
               v-else
               dense
               stack-label
+              autogrow
+              type="textarea"
               label="描述"
               v-model="editedData.description"
-              @keyup.enter="toggleEditField('description')"
             >
               <template #append>
                 <q-btn icon="check" flat round dense @click="toggleEditField('description')" />
@@ -435,18 +442,6 @@ watch(
                 <q-btn icon="close" flat round dense @click="cancelEdit('publisher')" />
               </template>
             </q-input>
-
-            <q-field dense label="发行日期" stack-label>
-              <template #control>
-                <div class="self-center full-width no-outline">
-                  {{
-                    metadata.release_date
-                      ? new Date(metadata.release_date).toLocaleDateString()
-                      : "-"
-                  }}
-                </div>
-              </template>
-            </q-field>
 
             <q-field dense label="大小" stack-label>
               <template #control>
@@ -542,11 +537,58 @@ watch(
               </template>
             </q-field>
 
+            <q-field stack-label dense label="发行日期">
+              <template #control>
+                <div class="self-center full-width no-outline">
+                  {{
+                    editFields.release_date.state
+                      ? editedData.release_date
+                        ? `${editedData.release_date} (编辑中)`
+                        : "未选择"
+                      : metadata.release_date
+                        ? dayjs(metadata.release_date).format("YYYY/MM/DD")
+                        : "-"
+                  }}
+                </div>
+              </template>
+              <template #append>
+                <q-btn icon="edit" flat round dense>
+                  <q-popup-proxy
+                    cover
+                    transition-show="scale"
+                    transition-hide="scale"
+                    @before-show="toggleEditField('release_date')"
+                  >
+                    <q-date v-model="editedData.release_date" minimal>
+                      <div class="row items-center justify-end q-gutter-sm">
+                        <q-btn
+                          icon="close"
+                          color="primary"
+                          flat
+                          v-close-popup
+                          @click="cancelEdit('release_date')"
+                        />
+                        <q-btn
+                          icon="check"
+                          color="primary"
+                          flat
+                          v-close-popup
+                          @click="toggleEditField('release_date')"
+                        />
+                      </div>
+                    </q-date>
+                  </q-popup-proxy>
+                </q-btn>
+              </template>
+            </q-field>
+
             <q-field dense label="创建日期" stack-label>
               <template #control>
                 <div class="self-center full-width no-outline">
                   {{
-                    metadata.date_created ? new Date(metadata.date_created).toLocaleString() : "-"
+                    metadata.date_created
+                      ? dayjs(metadata.date_created).format("YYYY/MM/DD HH:mm:ss")
+                      : "-"
                   }}
                 </div>
               </template>
@@ -556,7 +598,9 @@ watch(
               <template #control>
                 <div class="self-center full-width no-outline">
                   {{
-                    metadata.date_updated ? new Date(metadata.date_updated).toLocaleString() : "-"
+                    metadata.date_updated
+                      ? dayjs(metadata.date_updated).format("YYYY/MM/DD HH:mm:ss")
+                      : "-"
                   }}
                 </div>
               </template>

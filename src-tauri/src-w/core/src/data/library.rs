@@ -96,7 +96,16 @@ pub fn lib_get_all() -> Result<GameLibrary, LibraryError> {
 }
 
 /// Adds a [GameMetadata] to the library
-pub fn lib_add(game: GameMetadata) -> Result<(), LibraryError> {
+pub fn lib_add(mut game: GameMetadata) -> Result<(), LibraryError> {
+    if let Ok(existed) = lib_get(&game.id) {
+        // Update mode
+        game.mark_updated();
+        if game.archive_path != existed.archive_path {
+            // Update size
+            let _ = game.calculate_size();
+        }
+    }
+
     let to_save = bson::to_vec(&game).map_err(LibraryError::SerializeError)?;
     let write = library().begin_write()?;
     {
