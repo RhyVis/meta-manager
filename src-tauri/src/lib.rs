@@ -2,9 +2,11 @@ use crate::command::*;
 use tracing::info;
 
 mod command;
+mod logger;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let _guard = logger::setup_logger().expect("Unable to setup logger");
     init().expect("Unable to initialize the application");
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
@@ -25,7 +27,6 @@ pub fn run() {
 }
 
 fn init() -> anyhow::Result<()> {
-    tracing_subscriber::fmt::init();
     info!("Initializing config...");
     m_core::foundation::config::init_once_only()?;
     info!("Initializing library...");

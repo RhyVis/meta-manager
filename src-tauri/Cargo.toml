@@ -12,6 +12,7 @@ anyhow = "1"
 thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = "0.3"
+tracing-appender = "0.2"
 config = "0.15"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -43,6 +44,7 @@ m-core = { path = "src-w/core" }
 anyhow.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+tracing-appender.workspace = true
 tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
