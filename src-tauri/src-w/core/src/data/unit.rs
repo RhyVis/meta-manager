@@ -5,16 +5,41 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::Cursor;
 use std::path::Path;
-use tracing::{info, warn};
+use thiserror::Error;
+use tracing::{error, info, warn};
 use uuid::Uuid;
+
+#[derive(Debug, Error)]
+pub enum MetadataError {
+    #[error("Failed to build game metadata: {0}")]
+    BuilderError(#[from] GameMetadataBuilderError),
+
+    #[error("Invalid metadata: {0}")]
+    InvalidMetadata(String),
+
+    #[error("FileSystem failure: {0}")]
+    FileError(#[from] std::io::Error),
+
+    #[error("Failed in decompressing: {0}")]
+    DecompressionError(String),
+
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(tag = "platform", content = "id")]
 pub enum GamePlatform {
+    Unknown,
     Steam,
     DLSite,
     Other(String),
-    Unknown,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub enum DeployType {
+    Directory,
+    CopyFile,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -58,6 +83,8 @@ pub struct GameMetadata {
     #[builder(default)]
     pub deployed_path: Option<String>,
     #[builder(default)]
+    pub deployed_type: Option<DeployType>,
+    #[builder(default)]
     pub size_bytes: Option<u64>,
 
     #[builder(default)]
@@ -80,38 +107,38 @@ impl GameMetadata {
         title: &str,
         app_id: &str,
         archive_path: &str,
-    ) -> Result<GameMetadata, GameMetadataBuilderError> {
+    ) -> Result<GameMetadata, MetadataError> {
         GameMetadata::initial_builder(title)
             .platform(GamePlatform::Steam)
             .platform_id(app_id)
             .archive_path(archive_path)
             .build()
+            .map_err(|e| e.into())
     }
 
     pub fn from_dl(
         title: &str,
         dl_id: &str,
         archive_path: &str,
-    ) -> Result<GameMetadata, GameMetadataBuilderError> {
+    ) -> Result<GameMetadata, MetadataError> {
         GameMetadata::initial_builder(title)
             .platform(GamePlatform::DLSite)
             .platform_id(dl_id)
             .archive_path(archive_path)
             .build()
+            .map_err(|e| e.into())
     }
 
-    pub fn form_unknown(
-        title: &str,
-        archive_path: &str,
-    ) -> Result<GameMetadata, GameMetadataBuilderError> {
+    pub fn form_unknown(title: &str, archive_path: &str) -> Result<GameMetadata, MetadataError> {
         GameMetadata::initial_builder(title)
             .platform(GamePlatform::Unknown)
             .archive_path(archive_path)
             .build()
+            .map_err(|e| e.into())
     }
 
     /// Calculate the size of the archive
-    pub fn calculate_size(&mut self) -> anyhow::Result<u64> {
+    pub fn calculate_size(&mut self) -> Result<u64, MetadataError> {
         match self.archive_path.as_ref() {
             None => {
                 warn!(
@@ -123,7 +150,12 @@ impl GameMetadata {
             Some(archive_path) => {
                 let path = Path::new(archive_path);
                 if !path.exists() {
-                    Err(anyhow::anyhow!("{:?} does not exist", path))
+                    let err = format!(
+                        "Trying to calculate size of '{}' without a valid archive path",
+                        &self.title
+                    );
+                    error!(err);
+                    Err(MetadataError::InvalidMetadata(err))
                 } else if path.is_file() {
                     match path.metadata() {
                         Ok(meta) => {
@@ -138,11 +170,7 @@ impl GameMetadata {
                                 path.display(),
                                 err
                             );
-                            Err(anyhow::anyhow!(
-                                "Failed to get metadata for file {}: {}",
-                                path.display(),
-                                err
-                            ))
+                            Err(MetadataError::FileError(err))
                         }
                     }
                 } else if path.is_dir() {
@@ -160,8 +188,13 @@ impl GameMetadata {
                     );
                     Ok(calculated_size)
                 } else {
-                    warn!("Unexpected path type: {}", archive_path);
-                    Err(anyhow::anyhow!("Unexpected path type: {}", archive_path))
+                    let err = format!(
+                        "Unexpected path type for archive {}: {}",
+                        archive_path,
+                        path.display()
+                    );
+                    warn!(err);
+                    Err(MetadataError::InvalidMetadata(err))
                 }
             }
         }
@@ -171,42 +204,81 @@ impl GameMetadata {
         self.date_updated = Utc::now();
     }
 
-    pub fn deploy(&self, path: &str) -> anyhow::Result<()> {
+    pub fn deploy(&mut self, path: &str) -> Result<(), MetadataError> {
+        // Check if the archive path is valid
         let archive_path = match self.archive_path.as_ref() {
             Some(archive_path) => {
                 let path = Path::new(archive_path);
                 if !path.exists() {
-                    warn!(
+                    let err = format!(
                         "Trying to deploy '{}' without a valid archive path",
                         &self.title
                     );
-                    return Err(anyhow::anyhow!(
-                        "Archive path for '{}' not exists",
-                        &self.title
-                    ));
+                    warn!(err);
+                    return Err(MetadataError::InvalidMetadata(err));
                 }
                 path
             }
             None => {
-                warn!("Trying to deploy '{}' without an archive path", &self.title);
-                return Err(anyhow::anyhow!("No archive path for '{}'", &self.title));
+                let err = format!("Trying to deploy '{}' without an archive path", &self.title);
+                warn!(err);
+                return Err(MetadataError::InvalidOperation(err));
             }
         };
+
+        // Check if the deployment path is valid
         let deploy_path = Path::new(path);
         if deploy_path.exists() {
-            warn!("Trying to deploy to an existing path: {}", path);
-            return Err(anyhow::anyhow!("{:?} already exists", path));
+            // Selected a file target, invalid
+            if deploy_path.is_file() {
+                let err = format!(
+                    "Trying to deploy '{}' to an existing file path: {}",
+                    &self.title,
+                    deploy_path.display()
+                );
+                warn!(err);
+                return Err(MetadataError::InvalidOperation(err));
+            }
+        } else {
+            // Selected a directory target, create it
+            warn!(
+                "The selected path {} does not exist, creating it",
+                deploy_path.display()
+            );
+            fs::create_dir_all(deploy_path)?;
         }
-        fs::create_dir_all(deploy_path.parent().unwrap())?;
+
+        fn check_target_empty(path: &Path, title: &str) -> Result<(), MetadataError> {
+            if fs::read_dir(path)?.next().is_some() {
+                let err = format!(
+                    "Trying to deploy folder '{}' to a non-empty directory: {}",
+                    title,
+                    path.display()
+                );
+                warn!(err);
+                Err(MetadataError::InvalidOperation(err))
+            } else {
+                Ok(())
+            }
+        }
 
         if archive_path.is_dir() {
+            // Directory deployment
+            check_target_empty(deploy_path, &self.title)?;
+
             info!(
-                "Copying {} to {}",
+                "Copying from {} to {}",
                 archive_path.display(),
                 deploy_path.display()
             );
+
             file::copy_dir_all(archive_path, deploy_path)?;
+
+            self.deployed_path = Some(path.to_string());
+            self.deployed_type = Some(DeployType::Directory);
+            self.mark_updated();
         } else if archive_path.is_file() {
+            // File deployment
             match archive_path
                 .extension()
                 .unwrap()
@@ -215,14 +287,19 @@ impl GameMetadata {
                 .as_str()
             {
                 "zip" => {
+                    check_target_empty(deploy_path, &self.title)?;
                     info!(
                         "Decompressing ZIP {} to {}",
                         archive_path.display(),
                         deploy_path.display()
                     );
-                    zip_extract::extract(Cursor::new(fs::read(archive_path)?), deploy_path, false)?;
+                    zip_extract::extract(Cursor::new(fs::read(archive_path)?), deploy_path, false)
+                        .map_err(|e| MetadataError::DecompressionError(e.to_string()))?;
+                    self.deployed_path = Some(path.to_string());
+                    self.deployed_type = Some(DeployType::Directory);
                 }
                 "7z" => {
+                    check_target_empty(deploy_path, &self.title)?;
                     info!(
                         "Decompressing 7z {} to {}",
                         archive_path.display(),
@@ -233,10 +310,14 @@ impl GameMetadata {
                             archive_path,
                             deploy_path,
                             password.as_str().into(),
-                        )?
+                        )
+                        .map_err(|e| MetadataError::DecompressionError(e.to_string()))?;
                     } else {
-                        sevenz_rust2::decompress_file(archive_path, deploy_path)?;
+                        sevenz_rust2::decompress_file(archive_path, deploy_path)
+                            .map_err(|e| MetadataError::DecompressionError(e.to_string()))?;
                     }
+                    self.deployed_path = Some(path.to_string());
+                    self.deployed_type = Some(DeployType::Directory);
                 }
                 _ => {
                     info!(
@@ -244,14 +325,89 @@ impl GameMetadata {
                         archive_path.display(),
                         deploy_path.display()
                     );
-                    fs::copy(
-                        archive_path,
-                        deploy_path.join(archive_path.file_name().unwrap()),
-                    )?;
+
+                    let target_file_path = deploy_path.join(archive_path.file_name().unwrap());
+                    fs::copy(archive_path, &target_file_path)?;
+                    self.deployed_path = Some(target_file_path.to_string_lossy().to_string());
+                    self.deployed_type = Some(DeployType::CopyFile);
+                }
+            }
+            self.mark_updated();
+        } else {
+            let err = format!(
+                "Unexpected path type for archive {}: {}",
+                self.archive_path
+                    .as_ref()
+                    .unwrap_or(&"!notfound!".to_string()),
+                archive_path.display()
+            );
+            warn!(err);
+            return Err(MetadataError::InvalidMetadata(err));
+        }
+
+        Ok(())
+    }
+
+    pub fn deploy_off(&mut self) -> Result<(), MetadataError> {
+        fn err_invalid_path(m: &mut GameMetadata) -> Result<(), MetadataError> {
+            m.deployed_path = None;
+            m.deployed_type = None;
+            m.mark_updated();
+            let err = format!(
+                "Trying to deploy off '{}' without a valid deployed path",
+                &m.title
+            );
+            error!(err);
+            Err(MetadataError::InvalidOperation(err))
+        }
+
+        match (&self.deployed_path, &self.deployed_type) {
+            (None, _) | (_, None) => {
+                return err_invalid_path(self);
+            }
+            (Some(deploy_path), Some(deploy_type)) => {
+                let deploy_path = Path::new(deploy_path);
+                if !deploy_path.exists() {
+                    return err_invalid_path(self);
+                }
+
+                match deploy_type {
+                    DeployType::Directory => {
+                        if !deploy_path.is_dir() {
+                            return err_invalid_path(self);
+                        }
+                        info!("Clearing directory {}", deploy_path.display());
+
+                        for entry in fs::read_dir(deploy_path)? {
+                            let entry = entry?;
+                            if entry.path().is_dir() {
+                                fs::remove_dir_all(entry.path())?;
+                            } else {
+                                fs::remove_file(entry.path())?;
+                            }
+                        }
+
+                        info!("Successfully cleared directory {}", &deploy_path.display());
+
+                        self.deployed_path = None;
+                        self.deployed_type = None;
+                        self.mark_updated();
+                    }
+                    DeployType::CopyFile => {
+                        if !deploy_path.is_file() {
+                            return err_invalid_path(self);
+                        }
+                        info!("Deleting file {}", deploy_path.display());
+                        fs::remove_file(deploy_path)?;
+                        info!("Successfully deleted file {}", &deploy_path.display());
+
+                        self.deployed_path = None;
+                        self.deployed_type = None;
+                        self.mark_updated();
+                    }
                 }
             }
         }
-
         Ok(())
     }
 }

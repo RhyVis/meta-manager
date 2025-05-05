@@ -1,10 +1,10 @@
+import AppLayout from "@/layout/AppLayout.vue";
 import type { RouteRecordRaw } from "vue-router";
-import ApplicationLayout from "@/layout/ApplicationLayout.vue";
 
 const records: RouteRecordRaw[] = [
   {
     path: "/",
-    component: ApplicationLayout,
+    component: AppLayout,
     children: [
       {
         path: "",

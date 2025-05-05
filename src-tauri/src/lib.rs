@@ -14,6 +14,8 @@ pub fn run() {
             library_del,
             library_reload,
             library_replace,
+            library_deploy,
+            library_deploy_off,
             metadata_add_steam,
             metadata_add_dl,
             metadata_add_unknown

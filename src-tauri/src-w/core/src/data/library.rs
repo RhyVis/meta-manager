@@ -1,4 +1,4 @@
-use crate::data::unit::GameMetadata;
+use crate::data::unit::{GameMetadata, MetadataError};
 use crate::foundation::config::get_clone as config_get_clone;
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -22,6 +22,12 @@ pub enum LibraryError {
 
     #[error("Failed to parse library file: {0}")]
     ParseError(serde_json::Error),
+
+    #[error("Failed in deployment for {1}: {0}")]
+    DeploymentError(MetadataError, String),
+
+    #[error("Failed in deployment off for {1}: {0}")]
+    DeploymentOffError(MetadataError, String),
 
     #[error("Failed with config: {0}")]
     ConfigError(crate::foundation::config::ConfigError),
@@ -62,6 +68,10 @@ impl GameLibrary {
         self.entries.iter().find(|game| game.id == id)
     }
 
+    pub fn get_game_mut(&mut self, id: &str) -> Option<&mut GameMetadata> {
+        self.entries.iter_mut().find(|game| game.id == id)
+    }
+
     pub fn add_game(&mut self, game: GameMetadata) -> Result<(), LibraryError> {
         info!("Adding metadata for {}", game.id);
         self.entries.push(game);
@@ -84,6 +94,28 @@ impl GameLibrary {
         if let Some(pos) = self.entries.iter().position(|game| game.id == id) {
             info!("Deleting metadata for {}", id);
             self.entries.remove(pos);
+            self.save()?;
+            Ok(())
+        } else {
+            Err(LibraryError::NotFound(id.to_string()))
+        }
+    }
+
+    pub fn deploy_game(&mut self, id: &str, path: &str) -> Result<(), LibraryError> {
+        if let Some(g) = self.get_game_mut(id) {
+            g.deploy(path)
+                .map_err(|e| LibraryError::DeploymentError(e, id.to_string()))?;
+            self.save()?;
+            Ok(())
+        } else {
+            Err(LibraryError::NotFound(id.to_string()))
+        }
+    }
+
+    pub fn deploy_off_game(&mut self, id: &str) -> Result<(), LibraryError> {
+        if let Some(g) = self.get_game_mut(id) {
+            g.deploy_off()
+                .map_err(|e| LibraryError::DeploymentOffError(e, id.to_string()))?;
             self.save()?;
             Ok(())
         } else {

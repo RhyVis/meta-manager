@@ -1,26 +1,24 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import type { GameMetadata } from "@/lib/bridge.ts";
 import {
   command_library_del,
-  command_library_get,
-  command_library_reload,
   command_library_replace,
   command_metadata_add_dl,
   command_metadata_add_steam,
   command_metadata_add_unknown,
 } from "@/lib/command.ts";
-import { set, useToggle } from "@vueuse/core";
-import type { GameMetadata } from "@/lib/bridge.ts";
-import { useQuasar } from "quasar";
+import DetailDial from "@/pages/manage/dashboard/comp/DetailDial.vue";
 import {
   dashboardColumns,
   extractFilenameFromPath,
   formatPath,
 } from "@/pages/manage/dashboard/script.ts";
-import { open } from "@tauri-apps/plugin-dialog";
-import { storeToRefs } from "pinia";
 import { useLibraryStore } from "@/stores/library.ts";
-import DetailDial from "@/pages/manage/dashboard/comp/DetailDial.vue";
+import { open } from "@tauri-apps/plugin-dialog";
+import { set, useToggle } from "@vueuse/core";
+import { storeToRefs } from "pinia";
+import { useQuasar } from "quasar";
+import { onMounted, ref } from "vue";
 
 const { notify } = useQuasar();
 const [loading, setLoading] = useToggle(false);
@@ -37,11 +35,10 @@ const submitForm = ref({
 });
 const submitType = ref("");
 
-const { lib } = storeToRefs(useLibraryStore());
+const libraryStore = useLibraryStore();
 const visibleColumns = ref(["title", "platform", "size", "actions"]);
-const pagination = ref({
-  rowsPerPage: 10,
-});
+const pagination = ref({ rowsPerPage: 10 });
+const { lib } = storeToRefs(libraryStore);
 
 const openFileDialog = async () => {
   try {
@@ -106,22 +103,13 @@ const handleOpenDetailDialog = (metadata: GameMetadata) => {
 };
 const handleReload = async () => {
   try {
-    console.info("Reloading library");
     setLoading(true);
-    set(lib, await command_library_reload());
+    await libraryStore.reload();
     notify({
       type: "positive",
       message: "游戏库已重新加载",
       position: "bottom-right",
     });
-  } catch (e) {
-    console.error("Failed to reload library", e);
-    notify({
-      type: "negative",
-      message: "Failed to reload library",
-      caption: e as string,
-    });
-    set(lib, null);
   } finally {
     setLoading(false);
   }
@@ -168,7 +156,7 @@ const handleSubmit = async () => {
         break;
       }
     }
-    set(lib, await command_library_get());
+    await libraryStore.getLibrary();
     set(submitForm, {
       title: "",
       appId: "",
@@ -197,7 +185,7 @@ const handleUpdate = async (replacer: GameMetadata) => {
     setLoading(true);
     await command_library_replace(replacer);
     set(detailMetadata, replacer);
-    set(lib, await command_library_get());
+    await libraryStore.getLibrary();
     notify({
       type: "positive",
       message: "游戏元数据已更新",
@@ -219,7 +207,7 @@ const handleDelete = async (id: string) => {
   try {
     setLoading(true);
     await command_library_del(id);
-    set(lib, await command_library_get());
+    await libraryStore.getLibrary();
     notify({
       type: "positive",
       message: "游戏元数据已删除",
@@ -241,21 +229,18 @@ const handleDelete = async (id: string) => {
 
 onMounted(() => {
   setLoading(true);
-  command_library_get()
-    .then((data) => {
-      set(lib, data);
-    })
-    .catch((e) => {
-      console.error("Failed to get library:", e);
-      notify({
-        type: "negative",
-        message: "获取游戏库失败",
-        caption: e as string,
-      });
-    })
-    .finally(() => {
-      setLoading(false);
+  try {
+    libraryStore.getLibrary();
+  } catch (e) {
+    console.error("Failed to get library:", e);
+    notify({
+      type: "negative",
+      message: "获取游戏库失败",
+      caption: e as string,
     });
+  } finally {
+    setLoading(false);
+  }
 });
 </script>
 
@@ -282,7 +267,7 @@ onMounted(() => {
     <!-- 列显示控制 -->
     <q-btn color="secondary" icon="view_column" flat>
       <q-menu>
-        <q-list style="min-width: 200px">
+        <q-list dense style="min-width: 200px">
           <q-item
             tag="label"
             v-for="column in dashboardColumns.filter(
@@ -355,6 +340,7 @@ onMounted(() => {
     v-model="detailDialog"
     @update="handleUpdate"
     @delete="handleDelete"
+    @close="setDetailDialog(false)"
   />
 
   <!-- 添加游戏对话框 -->
@@ -387,7 +373,11 @@ onMounted(() => {
             :loading="submitLoading"
             lazy-rules
             :rules="[(val) => !!val || '请输入APPID']"
-          />
+          >
+            <template #append>
+              <q-btn flat dense icon="shuffle" no-caps @click="submitForm.appId = '-'" />
+            </template>
+          </q-input>
           <q-input
             filled
             v-model="submitForm.archivePath"
@@ -397,7 +387,7 @@ onMounted(() => {
             lazy-rules
             :rules="[(val) => !!val || '请选择存档路径']"
           >
-            <template v-slot:append>
+            <template #append>
               <q-btn-dropdown flat dense icon="folder" no-caps>
                 <q-list>
                   <q-item clickable v-close-popup @click="openFileDialog">

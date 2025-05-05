@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppLayoutSide from "@/layout/partial/AppLayoutSide.vue";
 import { useToggle } from "@vueuse/core";
 
 const [drawerOpen, setDrawerOpen] = useToggle(false);
@@ -13,7 +14,7 @@ const [drawerOpen, setDrawerOpen] = useToggle(false);
       </q-toolbar>
     </q-header>
     <q-drawer v-model="drawerOpen">
-      <q-btn to="dashboard">Switch Test</q-btn>
+      <AppLayoutSide />
     </q-drawer>
     <q-page-container id="main-container">
       <RouterView />

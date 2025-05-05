@@ -28,7 +28,7 @@ pub fn cd_with(append: &str) -> PathBuf {
     cd().join(append)
 }
 
-pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> anyhow::Result<()> {
+pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<(), std::io::Error> {
     if !dst.as_ref().exists() {
         fs::create_dir_all(&dst)?;
     }
