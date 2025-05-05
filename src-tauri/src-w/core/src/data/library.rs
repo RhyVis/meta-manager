@@ -134,9 +134,17 @@ pub fn lib_delegate_deploy(id: &str, path: &str) -> Result<(), LibraryError> {
 /// Get [GameMetadata] from the library and deploy it off
 pub fn lib_delegate_deploy_off(id: &str) -> Result<(), LibraryError> {
     let mut g = lib_get(id)?;
-    g.deploy_off()
-        .map_err(|e| LibraryError::DeploymentOffError(e, id.to_string()))?;
-    lib_add(g)
+    match g.deploy_off() {
+        Ok(_) => lib_add(g),
+        Err(err) => match err {
+            MetadataError::InvalidOperation(_) => {
+                // Update the info
+                lib_add(g)?;
+                Err(LibraryError::DeploymentOffError(err, id.to_string()))
+            }
+            _ => Err(LibraryError::DeploymentOffError(err, id.to_string()))?,
+        },
+    }
 }
 
 /// Since the library has switched to [redb],

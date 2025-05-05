@@ -3,7 +3,6 @@ use chrono::{DateTime, Utc};
 use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::io::Cursor;
 use std::path::Path;
 use thiserror::Error;
 use tracing::{error, info, warn};
@@ -79,7 +78,7 @@ pub struct GameMetadata {
     #[builder(default)]
     pub archive_path: Option<String>,
     #[builder(default)]
-    pub archive_path_password: Option<String>,
+    pub archive_password: Option<String>,
     #[builder(default)]
     pub deployed_path: Option<String>,
     #[builder(default)]
@@ -200,6 +199,11 @@ impl GameMetadata {
         }
     }
 
+    pub fn remove_deploy_info(&mut self) {
+        self.deployed_path = None;
+        self.deployed_type = None;
+    }
+
     pub fn mark_updated(&mut self) {
         self.date_updated = Utc::now();
     }
@@ -293,8 +297,14 @@ impl GameMetadata {
                         archive_path.display(),
                         deploy_path.display()
                     );
-                    zip_extract::extract(Cursor::new(fs::read(archive_path)?), deploy_path, false)
-                        .map_err(|e| MetadataError::DecompressionError(e.to_string()))?;
+                    match &self.archive_password {
+                        Some(password) => {
+                            file::extract_zip_decrypt(archive_path, deploy_path, password)
+                                .map_err(|e| MetadataError::DecompressionError(e.to_string()))?
+                        }
+                        None => file::extract_zip(archive_path, deploy_path)
+                            .map_err(|e| MetadataError::DecompressionError(e.to_string()))?,
+                    }
                     self.deployed_path = Some(path.to_string());
                     self.deployed_type = Some(DeployType::Directory);
                 }
@@ -305,7 +315,7 @@ impl GameMetadata {
                         archive_path.display(),
                         deploy_path.display()
                     );
-                    if let Some(password) = &self.archive_path_password {
+                    if let Some(password) = &self.archive_password {
                         sevenz_rust2::decompress_file_with_password(
                             archive_path,
                             deploy_path,
@@ -350,8 +360,7 @@ impl GameMetadata {
 
     pub fn deploy_off(&mut self) -> Result<(), MetadataError> {
         fn err_invalid_path(m: &mut GameMetadata) -> Result<(), MetadataError> {
-            m.deployed_path = None;
-            m.deployed_type = None;
+            m.remove_deploy_info();
             m.mark_updated();
             let err = format!(
                 "Trying to deploy off '{}' without a valid deployed path",
@@ -389,8 +398,7 @@ impl GameMetadata {
 
                         info!("Successfully cleared directory {}", &deploy_path.display());
 
-                        self.deployed_path = None;
-                        self.deployed_type = None;
+                        self.remove_deploy_info();
                         self.mark_updated();
                     }
                     DeployType::CopyFile => {
@@ -401,8 +409,7 @@ impl GameMetadata {
                         fs::remove_file(deploy_path)?;
                         info!("Successfully deleted file {}", &deploy_path.display());
 
-                        self.deployed_path = None;
-                        self.deployed_type = None;
+                        self.remove_deploy_info();
                         self.mark_updated();
                     }
                 }

@@ -1,24 +1,15 @@
 <script setup lang="ts">
-import type { GameMetadata } from "@/lib/bridge.ts";
-import {
-  command_library_del,
-  command_library_replace,
-  command_metadata_add_dl,
-  command_metadata_add_steam,
-  command_metadata_add_unknown,
-} from "@/lib/command.ts";
+import { type GameMetadata, PlatformType } from "@/lib/bridge.ts";
+import { command_library_del, command_library_set, command_metadata_add } from "@/lib/command.ts";
 import DetailDial from "@/pages/manage/dashboard/comp/DetailDial.vue";
-import {
-  dashboardColumns,
-  extractFilenameFromPath,
-  formatPath,
-} from "@/pages/manage/dashboard/script.ts";
+import { dashboardColumns, extractFilenameFromPath, formatPath, type MetadataSubmit } from "@/pages/manage/dashboard/script.ts";
 import { useLibraryStore } from "@/stores/library.ts";
 import { open } from "@tauri-apps/plugin-dialog";
-import { set, useToggle } from "@vueuse/core";
+import { get, set, useToggle } from "@vueuse/core";
 import { storeToRefs } from "pinia";
 import { useQuasar } from "quasar";
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
+
 
 const { notify } = useQuasar();
 const [loading, setLoading] = useToggle(false);
@@ -33,7 +24,15 @@ const submitForm = ref({
   appId: "",
   archivePath: "",
 });
-const submitType = ref("");
+const submitType = ref<string>(PlatformType.Unknown);
+const submitData = computed<MetadataSubmit>(() => ({
+  title: submitForm.value.title,
+  archivePath: submitForm.value.archivePath,
+  info: {
+    name: submitType.value,
+    id: submitForm.value.appId,
+  },
+}));
 
 const libraryStore = useLibraryStore();
 const visibleColumns = ref(["title", "platform", "size", "actions"]);
@@ -127,7 +126,7 @@ const handleSubmit = async () => {
     console.log("Adding metadata:", submitForm.value);
     setSubmitLoading(true);
     switch (submitType.value) {
-      case "steam": {
+      case PlatformType.Steam: {
         if (submitForm.value.appId.length == 0) {
           notify({
             type: "negative",
@@ -136,10 +135,10 @@ const handleSubmit = async () => {
           });
           return;
         }
-        await command_metadata_add_steam(submitForm.value);
+        await command_metadata_add(get(submitData));
         break;
       }
-      case "dl": {
+      case PlatformType.DLSite: {
         if (submitForm.value.appId.length == 0) {
           notify({
             type: "negative",
@@ -148,11 +147,11 @@ const handleSubmit = async () => {
           });
           return;
         }
-        await command_metadata_add_dl(submitForm.value);
+        await command_metadata_add(get(submitData));
         break;
       }
       default: {
-        await command_metadata_add_unknown(submitForm.value);
+        await command_metadata_add(get(submitData));
         break;
       }
     }
@@ -183,7 +182,7 @@ const handleUpdate = async (replacer: GameMetadata) => {
   console.log(`Updating metadata: ${replacer.id}`);
   try {
     setLoading(true);
-    await command_library_replace(replacer);
+    await command_library_set(replacer);
     set(detailMetadata, replacer);
     await libraryStore.getLibrary();
     notify({
@@ -354,8 +353,8 @@ onMounted(() => {
         <q-form @submit.prevent="handleSubmit" class="q-gutter-md">
           <q-field stack-label label="平台">
             <div class="q-gutter-md">
-              <q-radio v-model="submitType" val="steam" label="Steam" />
-              <q-radio v-model="submitType" val="dl" label="DLSite" />
+              <q-radio v-model="submitType" :val="PlatformType.Steam" label="Steam" />
+              <q-radio v-model="submitType" :val="PlatformType.DLSite" label="DLSite" />
             </div>
           </q-field>
           <q-input

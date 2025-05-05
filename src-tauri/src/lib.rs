@@ -14,13 +14,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             library_get,
             library_del,
-            library_reload,
-            library_replace,
+            library_set,
             library_deploy,
             library_deploy_off,
-            metadata_add_steam,
-            metadata_add_dl,
-            metadata_add_unknown
+            metadata_add
         ])
         .run(tauri::generate_context!())
         .expect("Initialization failed");

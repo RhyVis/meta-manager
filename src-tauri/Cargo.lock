@@ -2444,14 +2444,13 @@ dependencies = [
  "derive_builder",
  "redb",
  "serde",
- "serde_json",
  "sevenz-rust2",
  "thiserror 2.0.12",
  "toml",
  "tracing",
  "uuid",
  "walkdir",
- "zip-extract",
+ "zip",
 ]
 
 [[package]]
@@ -2501,6 +2500,7 @@ version = "1.0.0"
 dependencies = [
  "anyhow",
  "m-core",
+ "serde",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",
@@ -6201,17 +6201,6 @@ dependencies = [
  "zeroize",
  "zopfli",
  "zstd",
-]
-
-[[package]]
-name = "zip-extract"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "df3938d2b7d7ffd0fb7d4a86baeade9189535487d05d175401daf92306c531c0"
-dependencies = [
- "log",
- "thiserror 2.0.12",
- "zip",
 ]
 
 [[package]]

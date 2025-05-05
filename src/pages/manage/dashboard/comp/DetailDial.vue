@@ -46,6 +46,7 @@ const editFields = ref({
   version: { state: false, cache: "" },
   developer: { state: false, cache: "" },
   publisher: { state: false, cache: "" },
+  archive_password: { state: false, cache: "" },
 });
 const platformProxy = computed({
   get: () => editedData.value.platform?.platform || "Unknown!",
@@ -175,7 +176,20 @@ const handleDeployOff = async () => {
       cancel: true,
     }).onOk(async () => {
       setLoading(true);
-      await command_library_deploy_off(props.metadata!.id);
+      try {
+        await command_library_deploy_off(props.metadata!.id);
+      } catch (e) {
+        console.error("Error off deploying:", e);
+        notify({
+          type: "negative",
+          message: "取消部署失败",
+          caption: e as string,
+        });
+        await libraryStore.getLibrary();
+        setLoading(false);
+        emit("close");
+        return;
+      }
       await libraryStore.getLibrary();
       setLoading(false);
       notify({
@@ -467,6 +481,30 @@ watch(
                 </q-btn-dropdown>
               </template>
             </q-field>
+
+            <q-field v-if="!editFields.archive_password.state" dense label="存档密码" stack-label>
+              <template #control>
+                <div class="self-center full-width no-outline">
+                  {{ metadata.archive_password || "-" }}
+                </div>
+              </template>
+              <template #append>
+                <q-btn icon="edit" flat round dense @click="toggleEditField('archive_password')" />
+              </template>
+            </q-field>
+            <q-input
+              v-else
+              dense
+              stack-label
+              label="存档密码"
+              v-model="editedData.archive_password"
+              @keyup.enter="toggleEditField('archive_password')"
+            >
+              <template #append>
+                <q-btn icon="check" flat round dense @click="toggleEditField('archive_password')" />
+                <q-btn icon="close" flat round dense @click="cancelEdit('archive_password')" />
+              </template>
+            </q-input>
 
             <q-field dense label="部署路径" stack-label>
               <template #control>

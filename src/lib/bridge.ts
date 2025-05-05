@@ -42,7 +42,7 @@ export type GameMetadata = {
   release_date?: string;
 
   archive_path?: string;
-  archive_path_password?: string;
+  archive_password?: string;
   deployed_path?: string;
   size_bytes?: number;
 

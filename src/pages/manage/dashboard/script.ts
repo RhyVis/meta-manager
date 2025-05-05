@@ -1,10 +1,13 @@
 import { type GameMetadata, PlatformType } from "@/lib/bridge.ts";
 import type { QTableColumn } from "quasar";
 
-export type MetadataNewSubmit = {
+export type MetadataSubmit = {
   title: string;
-  appId: string;
   archivePath: string;
+  info: {
+    name: string;
+    id?: string;
+  };
 };
 
 export const metadataDeployed = (metadata: GameMetadata | null) => {

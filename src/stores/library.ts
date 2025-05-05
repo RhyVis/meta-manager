@@ -1,5 +1,5 @@
 import type { GameLibrary } from "@/lib/bridge.ts";
-import { command_library_get, command_library_reload } from "@/lib/command.ts";
+import { command_library_get } from "@/lib/command.ts";
 import { defineStore } from "pinia";
 import { Notify } from "quasar";
 
@@ -40,7 +40,7 @@ export const useLibraryStore = defineStore("library", {
     async reload() {
       console.info("Reloading library");
       try {
-        this.lib = await command_library_reload();
+        this.lib = await command_library_get();
       } catch (e) {
         console.error("Failed to reload library", e);
         Notify.create({
