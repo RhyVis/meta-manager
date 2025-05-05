@@ -22,6 +22,9 @@ pub enum MetadataError {
     #[error("Failed in decompressing: {0}")]
     DecompressionError(String),
 
+    #[error("Failed in decompressing RAR: {0}")]
+    DecompressionRARError(#[from] unrar::error::UnrarError),
+
     #[error("Invalid operation: {0}")]
     InvalidOperation(String),
 }
@@ -305,6 +308,31 @@ impl GameMetadata {
                         None => file::extract_zip(archive_path, deploy_path)
                             .map_err(|e| MetadataError::DecompressionError(e.to_string()))?,
                     }
+                    self.deployed_path = Some(path.to_string());
+                    self.deployed_type = Some(DeployType::Directory);
+                }
+                "rar" => {
+                    // Not fully implemented, but should work
+                    check_target_empty(deploy_path, &self.title)?;
+                    info!(
+                        "Decompressing RAR {} to {}",
+                        archive_path.display(),
+                        deploy_path.display()
+                    );
+                    let mut archive = match &self.archive_password {
+                        Some(pwd) => unrar::Archive::with_password(archive_path, pwd.as_bytes())
+                            .open_for_processing()?,
+                        None => unrar::Archive::new(archive_path).open_for_processing()?,
+                    };
+
+                    while let Some(header) = archive.read_header()? {
+                        archive = if header.entry().is_file() {
+                            header.extract_with_base(archive_path)?
+                        } else {
+                            header.skip()?
+                        }
+                    }
+
                     self.deployed_path = Some(path.to_string());
                     self.deployed_type = Some(DeployType::Directory);
                 }

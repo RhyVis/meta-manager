@@ -19,4 +19,5 @@ derive_builder.workspace = true
 uuid.workspace = true
 zip.workspace = true
 sevenz-rust2.workspace = true
+unrar.workspace = true
 redb.workspace = true

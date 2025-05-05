@@ -16,7 +16,7 @@ const navigateToDashboard = () => {
   <PageLayout>
     <ty-paragraph>
       <ty-title>M.E.T.A.</ty-title>
-      <ty-subtitle>A file metadata manager.</ty-subtitle>
+      <ty-subtitle>某种元数据管理器。</ty-subtitle>
     </ty-paragraph>
 
     <div class="q-mt-xl flex justify-center">
