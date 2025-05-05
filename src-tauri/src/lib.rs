@@ -30,6 +30,6 @@ fn init() -> anyhow::Result<()> {
     info!("Initializing config...");
     m_core::foundation::config::init_once_only()?;
     info!("Initializing library...");
-    m_core::data::library::reload()?;
+    m_core::data::library::lib_fresh()?;
     Ok(())
 }
