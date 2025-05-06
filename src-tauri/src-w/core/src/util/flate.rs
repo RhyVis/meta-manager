@@ -1,5 +1,7 @@
 use std::path::Path;
+use std::process::Command;
 use std::{fs, io};
+use tracing::info;
 use unrar::error::UnrarError;
 
 /// Extract a zip file to a specified directory
@@ -95,6 +97,86 @@ pub fn compress_dir_to_7z(
     output_file_path: impl AsRef<Path>,
     password: Option<&str>,
     compression_level: Option<u32>,
+) -> Result<(), String> {
+    if is_7z_in_path() {
+        info!(
+            "Using external 7z command in compressing {}",
+            input_dir.as_ref().display()
+        );
+        compress_7z_dir_external(input_dir, output_file_path, password, compression_level)
+            .map_err(|e| e.to_string())
+    } else {
+        info!(
+            "Using internal 7z library in compressing {}",
+            input_dir.as_ref().display()
+        );
+        compress_7z_dir_internal(input_dir, output_file_path, password, compression_level)
+            .map_err(|e| e.to_string())
+    }
+}
+
+fn is_7z_in_path() -> bool {
+    match Command::new("7z").arg("--help").output() {
+        Ok(out) => out.status.success(),
+        Err(_) => false,
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn create_hidden_command(cmd: &str) -> Command {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+    let mut command = Command::new(cmd);
+    command.creation_flags(CREATE_NO_WINDOW);
+    command
+}
+
+#[cfg(not(target_os = "windows"))]
+fn create_hidden_command(cmd: &str) -> Command {
+    Command::new(cmd)
+}
+
+fn compress_7z_dir_external(
+    input_dir: impl AsRef<Path>,
+    output_file_path: impl AsRef<Path>,
+    password: Option<&str>,
+    compression_level: Option<u32>,
+) -> Result<(), io::Error> {
+    let mut command = create_hidden_command("7z");
+
+    command.arg("a");
+
+    let level = compression_level.unwrap_or(5);
+    command.arg(format!("-mx={level}"));
+
+    if let Some(pwd) = password {
+        command.arg(format!("-p{pwd}"));
+    }
+
+    command.arg(output_file_path.as_ref());
+    command.current_dir(input_dir.as_ref());
+    command.arg("*");
+
+    let output = command.output()?;
+    if !output.status.success() {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!(
+                "Fail in 7z command exec: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ),
+        ));
+    }
+
+    Ok(())
+}
+
+fn compress_7z_dir_internal(
+    input_dir: impl AsRef<Path>,
+    output_file_path: impl AsRef<Path>,
+    password: Option<&str>,
+    compression_level: Option<u32>,
 ) -> Result<(), sevenz_rust2::Error> {
     use sevenz_rust2::lzma::LZMA2Options;
     use sevenz_rust2::{AesEncoderOptions, SevenZWriter};
@@ -113,6 +195,66 @@ pub fn compress_dir_to_7z(
 
     writer.push_source_path(input_dir, |_| true)?;
     writer.finish()?;
+
+    Ok(())
+}
+
+pub fn decompress_7z_to_dir(
+    input_file_path: impl AsRef<Path>,
+    output_dir: impl AsRef<Path>,
+    password: Option<&str>,
+) -> Result<(), String> {
+    if is_7z_in_path() {
+        info!(
+            "Using external 7z command in decompressing {}",
+            input_file_path.as_ref().display()
+        );
+        decompress_7z_to_dir_external(input_file_path, output_dir, password)
+            .map_err(|e| e.to_string())
+    } else {
+        info!(
+            "Using internal 7z library in decompressing {}",
+            input_file_path.as_ref().display()
+        );
+        if let Some(pwd) = password {
+            sevenz_rust2::decompress_file_with_password(input_file_path, output_dir, pwd.into())
+                .map_err(|e| e.to_string())
+        } else {
+            sevenz_rust2::decompress_file(input_file_path, output_dir).map_err(|e| e.to_string())
+        }
+    }
+}
+
+fn decompress_7z_to_dir_external(
+    input_file_path: impl AsRef<Path>,
+    output_dir: impl AsRef<Path>,
+    password: Option<&str>,
+) -> Result<(), io::Error> {
+    if !output_dir.as_ref().exists() {
+        fs::create_dir_all(output_dir.as_ref())?;
+    }
+
+    let mut command = create_hidden_command("7z");
+    command.arg("x");
+    command.arg(input_file_path.as_ref());
+    command.arg(format!("-o{}", output_dir.as_ref().display()));
+    command.arg("-aoa");
+
+    if let Some(pwd) = password {
+        command.arg(format!("-p{pwd}"));
+    }
+
+    let output = command.output()?;
+
+    if !output.status.success() {
+        return Err(io::Error::new(
+            io::ErrorKind::Other,
+            format!(
+                "Fail in 7z command exec: {}",
+                String::from_utf8_lossy(&output.stderr)
+            ),
+        ));
+    }
 
     Ok(())
 }

@@ -39,6 +39,14 @@ const validateAppId: ValidationRule = () => {
     return formAppId.value.length > 0 || "请输入APPID";
   }
 };
+const fillPassword = () => {
+  if (get(formModeIsArchive)) return;
+  if (formPassword.value) {
+    set(formPassword, generateRandomPassword(12));
+  } else {
+    set(formPassword, "META");
+  }
+};
 
 const handleSelFile = async () => {
   const path = await openSelectFile();
@@ -238,13 +246,7 @@ const handleSubmit = async () => {
             :rules="[(val) => !formUsePassword || !!val || '请输入密码']"
           >
             <template #append>
-              <q-btn
-                flat
-                dense
-                icon="password"
-                no-caps
-                @click="formPassword = generateRandomPassword(12)"
-              >
+              <q-btn flat dense icon="password" no-caps @click="fillPassword">
                 <q-tooltip>
                   <div>随机生成密码</div>
                 </q-tooltip>

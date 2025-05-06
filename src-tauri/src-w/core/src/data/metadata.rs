@@ -105,7 +105,8 @@ impl Metadata {
             return Err(MetadataError::InvalidOrigin(from_path));
         }
 
-        flate::compress_dir_to_7z(from_path, &target_path, password.as_deref(), Some(9))?;
+        flate::compress_dir_to_7z(from_path, &target_path, password.as_deref(), Some(9))
+            .map_err(MetadataError::CompressionError)?;
 
         let mut metadata = Self::new(
             title,
@@ -330,17 +331,12 @@ impl Metadata {
                         archive_path.display(),
                         deploy_path.display()
                     );
-                    if let Some(password) = &self.archive_password {
-                        sevenz_rust2::decompress_file_with_password(
-                            archive_path,
-                            deploy_path,
-                            password.as_str().into(),
-                        )
-                        .map_err(|e| MetadataError::DecompressionError(e.to_string()))?;
-                    } else {
-                        sevenz_rust2::decompress_file(archive_path, deploy_path)
-                            .map_err(|e| MetadataError::DecompressionError(e.to_string()))?;
-                    }
+                    flate::decompress_7z_to_dir(
+                        archive_path,
+                        deploy_path,
+                        self.archive_password.as_deref(),
+                    )
+                    .map_err(MetadataError::DecompressionError)?;
                     self.update_deployed_path(path.to_string(), DeployType::Directory);
                 }
                 _ => {
@@ -440,7 +436,7 @@ pub enum MetadataError {
     FileError(#[from] std::io::Error),
 
     #[error("Failed to compress: {0}")]
-    CompressionError(#[from] sevenz_rust2::Error),
+    CompressionError(String),
 
     #[error("Failed in decompressing: {0}")]
     DecompressionError(String),
