@@ -28,6 +28,24 @@ pub fn cd_with(append: &str) -> PathBuf {
     cd().join(append)
 }
 
+/// Get the current test directory
+#[cfg(test)]
+pub fn cd_test() -> PathBuf {
+    const TEST_DIR: &str = ".test";
+    cd_with(TEST_DIR)
+}
+
+/// Clear the test directory
+#[cfg(test)]
+pub fn cd_test_clear() {
+    let test_dir = cd_test();
+    if test_dir.exists() {
+        fs::remove_dir_all(&test_dir).unwrap_or_else(|_| {
+            panic!("Failed to remove test directory: {:?}", test_dir);
+        });
+    }
+}
+
 pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<(), io::Error> {
     if !dst.as_ref().exists() {
         fs::create_dir_all(&dst)?;
@@ -43,70 +61,6 @@ pub fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<(), 
             copy_dir_all(&src_path, &dst_path)?;
         } else {
             fs::copy(&src_path, &dst_path)?;
-        }
-    }
-
-    Ok(())
-}
-
-pub fn extract_zip(zip: impl AsRef<Path>, dst: impl AsRef<Path>) -> Result<(), io::Error> {
-    let file = fs::File::open(&zip)?;
-    let mut archive = zip::ZipArchive::new(file)?;
-
-    if !dst.as_ref().exists() {
-        fs::create_dir_all(&dst)?;
-    }
-
-    for cur in 0..archive.len() {
-        let mut file = archive.by_index(cur)?;
-
-        let out = dst.as_ref().join(file.mangled_name());
-
-        if file.name().ends_with('/') {
-            fs::create_dir_all(&out)?;
-        } else {
-            if let Some(parent) = out.parent() {
-                if !parent.exists() {
-                    fs::create_dir_all(parent)?;
-                }
-            }
-
-            let mut out_file = fs::File::create(&out)?;
-            io::copy(&mut file, &mut out_file)?;
-        }
-    }
-
-    Ok(())
-}
-
-pub fn extract_zip_decrypt(
-    zip: impl AsRef<Path>,
-    dst: impl AsRef<Path>,
-    password: &str,
-) -> Result<(), io::Error> {
-    let file = fs::File::open(&zip)?;
-    let mut archive = zip::ZipArchive::new(file)?;
-
-    if !dst.as_ref().exists() {
-        fs::create_dir_all(&dst)?;
-    }
-
-    for cur in 0..archive.len() {
-        let mut file = archive.by_index_decrypt(cur, password.as_bytes())?;
-
-        let out = dst.as_ref().join(file.mangled_name());
-
-        if file.name().ends_with('/') {
-            fs::create_dir_all(&out)?;
-        } else {
-            if let Some(parent) = out.parent() {
-                if !parent.exists() {
-                    fs::create_dir_all(parent)?;
-                }
-            }
-
-            let mut out_file = fs::File::create(&out)?;
-            io::copy(&mut file, &mut out_file)?;
         }
     }
 

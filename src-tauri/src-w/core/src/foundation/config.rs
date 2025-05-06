@@ -1,10 +1,11 @@
 use crate::util::file::cd_with;
 use config::{Config, FileFormat};
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::path::PathBuf;
 use std::sync::{OnceLock, RwLock, RwLockReadGuard};
 use thiserror::Error;
-use tracing::{debug, error};
+use tracing::{debug, error, info};
 
 #[derive(Debug, Error)]
 pub enum ConfigError {
@@ -49,7 +50,7 @@ impl AppConfig {
                 "Data directory '{}' does not exist, creating it",
                 &self.data_dir().display()
             );
-            std::fs::create_dir_all(self.data_dir())?;
+            fs::create_dir_all(self.data_dir())?;
         }
         Ok(())
     }
@@ -110,6 +111,17 @@ pub fn reload() -> Result<(), ConfigError> {
 }
 
 pub fn init_once_only() -> anyhow::Result<()> {
+    let config_path = cd_with("config.toml");
+    if !config_path.exists() {
+        info!(
+            "Config file '{}' does not exist, initializing default",
+            config_path.display()
+        );
+        fs::write(
+            config_path,
+            toml::to_string_pretty(&AppConfig::default())?.as_bytes(),
+        )?;
+    }
     reload()?;
     get_clone()?.check()
 }
@@ -121,7 +133,7 @@ fn save() -> Result<(), ConfigError> {
     let config_path = cd_with("config.toml");
 
     match toml::to_string_pretty(&config_c) {
-        Ok(config) => std::fs::write(config_path, config).map_err(ConfigError::FileError),
+        Ok(config) => fs::write(config_path, config).map_err(ConfigError::FileError),
         Err(err) => {
             error!("Failed to serialize config: {}", err);
             Err(ConfigError::SerializationError(err))

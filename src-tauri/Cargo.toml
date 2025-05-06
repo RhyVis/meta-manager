@@ -19,10 +19,10 @@ toml = "0.8"
 bson = { version = "2", features = ["chrono"] }
 chrono = { version = "0.4", features = ["serde"] }
 walkdir = "2"
-derive_builder = "0.20"
+bon = "3"
 uuid = { version = "1", features = ["v4"] }
 zip = "2"
-sevenz-rust2 = { version = "0.13", features = ["aes256"] }
+sevenz-rust2 = { version = "0.13", features = ["aes256", "compress"] }
 unrar = "0.5"
 redb = "2"
 

@@ -1,6 +1,6 @@
-use crate::util::file;
+use crate::util::{file, flate};
+use bon::{Builder, builder};
 use chrono::{DateTime, Utc};
-use derive_builder::Builder;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
@@ -8,30 +8,9 @@ use thiserror::Error;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-#[derive(Debug, Error)]
-pub enum MetadataError {
-    #[error("Failed to build game metadata: {0}")]
-    BuilderError(#[from] GameMetadataBuilderError),
-
-    #[error("Invalid metadata: {0}")]
-    InvalidMetadata(String),
-
-    #[error("FileSystem failure: {0}")]
-    FileError(#[from] std::io::Error),
-
-    #[error("Failed in decompressing: {0}")]
-    DecompressionError(String),
-
-    #[error("Failed in decompressing RAR: {0}")]
-    DecompressionRARError(#[from] unrar::error::UnrarError),
-
-    #[error("Invalid operation: {0}")]
-    InvalidOperation(String),
-}
-
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(tag = "platform", content = "id")]
-pub enum GamePlatform {
+pub enum Platform {
     Unknown,
     Steam,
     DLSite,
@@ -45,109 +24,87 @@ pub enum DeployType {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
-pub struct GameTag {
+pub struct Tag {
     pub name: String,
     pub category: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Builder)]
-#[builder(
-    try_setter,
-    setter(into, strip_option),
-    derive(Debug, Eq, PartialEq),
-    pattern = "owned"
-)]
-pub struct GameMetadata {
+pub struct Metadata {
     pub id: String,
     pub title: String,
-    #[builder(default)]
     pub original_title: Option<String>,
-    #[builder(default = "GamePlatform::Unknown")]
-    pub platform: GamePlatform,
-    #[builder(default)]
+    pub platform: Platform,
     pub platform_id: Option<String>,
 
-    #[builder(default)]
     pub description: Option<String>,
-    #[builder(default)]
     pub version: Option<String>,
-    #[builder(default)]
     pub developer: Option<String>,
-    #[builder(default)]
     pub publisher: Option<String>,
-    #[builder(default)]
     pub release_date: Option<String>,
 
-    #[builder(default)]
     pub archive_path: Option<String>,
-    #[builder(default)]
     pub archive_password: Option<String>,
-    #[builder(default)]
     pub deployed_path: Option<String>,
-    #[builder(default)]
     pub deployed_type: Option<DeployType>,
-    #[builder(default)]
     pub size_bytes: Option<u64>,
 
     #[builder(default)]
-    pub tags: Vec<GameTag>,
+    pub tags: Vec<Tag>,
 
-    #[builder(default = "Utc::now()")]
     pub date_created: DateTime<Utc>,
-    #[builder(default = "Utc::now()")]
     pub date_updated: DateTime<Utc>,
 }
 
-impl GameMetadata {
-    fn initial_builder(title: &str) -> GameMetadataBuilder {
-        GameMetadataBuilder::default()
-            .id(Uuid::new_v4().to_string())
+impl Metadata {
+    /// New on existing archive
+    pub fn new(
+        title: String,
+        platform: Platform,
+        platform_id: Option<String>,
+        archive_path: String,
+    ) -> Self {
+        let build = Self::builder()
             .title(title)
+            .platform(platform)
+            .archive_path(archive_path)
+            .id(Uuid::new_v4().to_string())
+            .date_created(Utc::now())
+            .date_updated(Utc::now());
+        if let Some(platform_id) = platform_id {
+            build.platform_id(platform_id).build()
+        } else {
+            build.build()
+        }
     }
 
-    pub fn from_steam(
-        title: &str,
-        app_id: &str,
-        archive_path: &str,
-    ) -> Result<GameMetadata, MetadataError> {
-        GameMetadata::initial_builder(title)
-            .platform(GamePlatform::Steam)
-            .platform_id(app_id)
-            .archive_path(archive_path)
-            .build()
-            .map_err(|e| e.into())
-    }
+    pub fn new_on_create_archive(
+        title: String,
+        platform: Platform,
+        platform_id: Option<String>,
+        from_path: String,
+        target_path: String,
+        password: Option<String>,
+    ) -> Result<Self, MetadataError> {
+        let from = Path::new(&from_path);
+        if !from.is_dir() {
+            warn!("Unexpected origin path: {}", from.display());
+            return Err(MetadataError::InvalidOrigin(from_path));
+        }
 
-    pub fn from_dl(
-        title: &str,
-        dl_id: &str,
-        archive_path: &str,
-    ) -> Result<GameMetadata, MetadataError> {
-        GameMetadata::initial_builder(title)
-            .platform(GamePlatform::DLSite)
-            .platform_id(dl_id)
-            .archive_path(archive_path)
-            .build()
-            .map_err(|e| e.into())
-    }
-
-    pub fn form_unknown(title: &str, archive_path: &str) -> Result<GameMetadata, MetadataError> {
-        GameMetadata::initial_builder(title)
-            .platform(GamePlatform::Unknown)
-            .archive_path(archive_path)
-            .build()
-            .map_err(|e| e.into())
+        flate::compress_dir_to_7z(from_path, &target_path, password.as_deref(), Some(9))?;
+        Ok(Self::new(title, platform, platform_id, target_path))
     }
 
     /// Calculate the size of the archive
-    pub fn calculate_size(&mut self) -> Result<u64, MetadataError> {
+    pub fn calculate_size(&mut self) -> Result<(), MetadataError> {
         match self.archive_path.as_ref() {
             None => {
                 warn!(
                     "Trying to calculate size of '{}' without an archive path",
                     &self.title
                 );
-                Ok(0)
+                Ok(())
             }
             Some(archive_path) => {
                 let path = Path::new(archive_path);
@@ -162,9 +119,9 @@ impl GameMetadata {
                     match path.metadata() {
                         Ok(meta) => {
                             let size = meta.len();
-                            self.size_bytes = Some(size);
                             info!("Calculated size of file {}: {}", path.display(), size);
-                            Ok(size)
+                            self.size_bytes = Some(size);
+                            Ok(())
                         }
                         Err(err) => {
                             warn!(
@@ -182,13 +139,13 @@ impl GameMetadata {
                         .filter(|entry| entry.file_type().is_file())
                         .map(|entry| entry.metadata().ok().map(|meta| meta.len()).unwrap_or(0))
                         .sum::<u64>();
-                    self.size_bytes = Some(calculated_size);
                     info!(
                         "Calculated size of directory {}: {}",
                         path.display(),
                         calculated_size
                     );
-                    Ok(calculated_size)
+                    self.size_bytes = Some(calculated_size);
+                    Ok(())
                 } else {
                     let err = format!(
                         "Unexpected path type for archive {}: {}",
@@ -202,17 +159,24 @@ impl GameMetadata {
         }
     }
 
-    pub fn remove_deploy_info(&mut self) {
-        self.deployed_path = None;
-        self.deployed_type = None;
-    }
-
     pub fn mark_updated(&mut self) {
         self.date_updated = Utc::now();
     }
 
-    pub fn deploy(&mut self, path: &str) -> Result<(), MetadataError> {
-        // Check if the archive path is valid
+    fn remove_deploy_info(&mut self) {
+        self.deployed_path = None;
+        self.deployed_type = None;
+        self.mark_updated();
+    }
+
+    fn update_deployed_path(&mut self, path: String, deploy_type: DeployType) {
+        self.deployed_path = Some(path);
+        self.deployed_type = Some(deploy_type);
+        self.mark_updated();
+    }
+
+    /// Check if the archive path is valid, if valid, return the [Path]
+    fn validate_archive_path(&self) -> Result<&Path, MetadataError> {
         let archive_path = match self.archive_path.as_ref() {
             Some(archive_path) => {
                 let path = Path::new(archive_path);
@@ -232,8 +196,11 @@ impl GameMetadata {
                 return Err(MetadataError::InvalidOperation(err));
             }
         };
+        Ok(archive_path)
+    }
 
-        // Check if the deployment path is valid
+    /// Check if the deployment target path is valid, if valid, return the [Path]
+    fn validate_deploy_path<'a>(&self, path: &'a str) -> Result<&'a Path, MetadataError> {
         let deploy_path = Path::new(path);
         if deploy_path.exists() {
             // Selected a file target, invalid
@@ -254,24 +221,32 @@ impl GameMetadata {
             );
             fs::create_dir_all(deploy_path)?;
         }
+        Ok(deploy_path)
+    }
 
-        fn check_target_empty(path: &Path, title: &str) -> Result<(), MetadataError> {
-            if fs::read_dir(path)?.next().is_some() {
-                let err = format!(
-                    "Trying to deploy folder '{}' to a non-empty directory: {}",
-                    title,
-                    path.display()
-                );
-                warn!(err);
-                Err(MetadataError::InvalidOperation(err))
-            } else {
-                Ok(())
-            }
+    /// Check if the target directory is empty, if not return [MetadataError::InvalidOperation]
+    fn check_target_empty(path: &Path, title: &str) -> Result<(), MetadataError> {
+        if fs::read_dir(path)?.next().is_some() {
+            let err = format!(
+                "Trying to deploy folder '{}' to a non-empty directory: {}",
+                title,
+                path.display()
+            );
+            warn!(err);
+            Err(MetadataError::InvalidOperation(err))
+        } else {
+            Ok(())
         }
+    }
+
+    pub fn deploy(&mut self, path: &str) -> Result<(), MetadataError> {
+        // Validation
+        let archive_path = self.validate_archive_path()?;
+        let deploy_path = self.validate_deploy_path(path)?;
 
         if archive_path.is_dir() {
             // Directory deployment
-            check_target_empty(deploy_path, &self.title)?;
+            Self::check_target_empty(deploy_path, &self.title)?;
 
             info!(
                 "Copying from {} to {}",
@@ -281,9 +256,7 @@ impl GameMetadata {
 
             file::copy_dir_all(archive_path, deploy_path)?;
 
-            self.deployed_path = Some(path.to_string());
-            self.deployed_type = Some(DeployType::Directory);
-            self.mark_updated();
+            self.update_deployed_path(path.to_string(), DeployType::Directory);
         } else if archive_path.is_file() {
             // File deployment
             match archive_path
@@ -294,7 +267,7 @@ impl GameMetadata {
                 .as_str()
             {
                 "zip" => {
-                    check_target_empty(deploy_path, &self.title)?;
+                    Self::check_target_empty(deploy_path, &self.title)?;
                     info!(
                         "Decompressing ZIP {} to {}",
                         archive_path.display(),
@@ -302,42 +275,31 @@ impl GameMetadata {
                     );
                     match &self.archive_password {
                         Some(password) => {
-                            file::extract_zip_decrypt(archive_path, deploy_path, password)
+                            flate::extract_zip_decrypt(archive_path, deploy_path, password)
                                 .map_err(|e| MetadataError::DecompressionError(e.to_string()))?
                         }
-                        None => file::extract_zip(archive_path, deploy_path)
+                        None => flate::extract_zip(archive_path, deploy_path)
                             .map_err(|e| MetadataError::DecompressionError(e.to_string()))?,
                     }
-                    self.deployed_path = Some(path.to_string());
-                    self.deployed_type = Some(DeployType::Directory);
+                    self.update_deployed_path(path.to_string(), DeployType::Directory);
                 }
                 "rar" => {
                     // Not fully implemented, but should work
-                    check_target_empty(deploy_path, &self.title)?;
+                    Self::check_target_empty(deploy_path, &self.title)?;
                     info!(
                         "Decompressing RAR {} to {}",
                         archive_path.display(),
                         deploy_path.display()
                     );
-                    let mut archive = match &self.archive_password {
-                        Some(pwd) => unrar::Archive::with_password(archive_path, pwd.as_bytes())
-                            .open_for_processing()?,
-                        None => unrar::Archive::new(archive_path).open_for_processing()?,
-                    };
-
-                    while let Some(header) = archive.read_header()? {
-                        archive = if header.entry().is_file() {
-                            header.extract_with_base(archive_path)?
-                        } else {
-                            header.skip()?
-                        }
-                    }
-
-                    self.deployed_path = Some(path.to_string());
-                    self.deployed_type = Some(DeployType::Directory);
+                    flate::extract_rar(
+                        archive_path,
+                        deploy_path,
+                        self.archive_password.as_deref(),
+                    )?;
+                    self.update_deployed_path(path.to_string(), DeployType::Directory);
                 }
                 "7z" => {
-                    check_target_empty(deploy_path, &self.title)?;
+                    Self::check_target_empty(deploy_path, &self.title)?;
                     info!(
                         "Decompressing 7z {} to {}",
                         archive_path.display(),
@@ -354,8 +316,7 @@ impl GameMetadata {
                         sevenz_rust2::decompress_file(archive_path, deploy_path)
                             .map_err(|e| MetadataError::DecompressionError(e.to_string()))?;
                     }
-                    self.deployed_path = Some(path.to_string());
-                    self.deployed_type = Some(DeployType::Directory);
+                    self.update_deployed_path(path.to_string(), DeployType::Directory);
                 }
                 _ => {
                     info!(
@@ -366,11 +327,9 @@ impl GameMetadata {
 
                     let target_file_path = deploy_path.join(archive_path.file_name().unwrap());
                     fs::copy(archive_path, &target_file_path)?;
-                    self.deployed_path = Some(target_file_path.to_string_lossy().to_string());
-                    self.deployed_type = Some(DeployType::CopyFile);
+                    self.update_deployed_path(path.to_string(), DeployType::CopyFile);
                 }
             }
-            self.mark_updated();
         } else {
             let err = format!(
                 "Unexpected path type for archive {}: {}",
@@ -387,9 +346,8 @@ impl GameMetadata {
     }
 
     pub fn deploy_off(&mut self) -> Result<(), MetadataError> {
-        fn err_invalid_path(m: &mut GameMetadata) -> Result<(), MetadataError> {
+        fn err_invalid_path(m: &mut Metadata) -> Result<(), MetadataError> {
             m.remove_deploy_info();
-            m.mark_updated();
             let err = format!(
                 "Trying to deploy off '{}' without a valid deployed path",
                 &m.title
@@ -427,7 +385,6 @@ impl GameMetadata {
                         info!("Successfully cleared directory {}", &deploy_path.display());
 
                         self.remove_deploy_info();
-                        self.mark_updated();
                     }
                     DeployType::CopyFile => {
                         if !deploy_path.is_file() {
@@ -438,7 +395,6 @@ impl GameMetadata {
                         info!("Successfully deleted file {}", &deploy_path.display());
 
                         self.remove_deploy_info();
-                        self.mark_updated();
                     }
                 }
             }
@@ -447,20 +403,26 @@ impl GameMetadata {
     }
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
+#[derive(Debug, Error)]
+pub enum MetadataError {
+    #[error("Invalid metadata: {0}")]
+    InvalidMetadata(String),
 
-    #[test]
-    fn test_game_metadata_build() {
-        let m = GameMetadataBuilder::default()
-            .id("12")
-            .title("Test Game")
-            .platform(GamePlatform::Steam)
-            .build()
-            .unwrap();
-        assert_eq!(m.id, "12");
-        assert_eq!(m.title, "Test Game");
-        assert_eq!(m.platform, GamePlatform::Steam);
-    }
+    #[error("The provided origin path is invalid: {0}")]
+    InvalidOrigin(String),
+
+    #[error("FileSystem failure: {0}")]
+    FileError(#[from] std::io::Error),
+
+    #[error("Failed to compress: {0}")]
+    CompressionError(#[from] sevenz_rust2::Error),
+
+    #[error("Failed in decompressing: {0}")]
+    DecompressionError(String),
+
+    #[error("Failed in decompressing RAR: {0}")]
+    DecompressionRARError(#[from] unrar::error::UnrarError),
+
+    #[error("Invalid operation: {0}")]
+    InvalidOperation(String),
 }
