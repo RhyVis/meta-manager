@@ -1,4 +1,5 @@
 import App from "@/App.vue";
+import "@/assets/main.sass";
 import router from "@/router";
 import store from "@/stores";
 import "@quasar/extras/material-icons/material-icons.css";

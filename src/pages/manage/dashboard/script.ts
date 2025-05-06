@@ -1,16 +1,25 @@
-import { type GameMetadata, PlatformType } from "@/lib/bridge.ts";
+import { type Metadata, PlatformType } from "@/lib/bridge.ts";
 import type { QTableColumn } from "quasar";
+
+export type PlatformInfo = {
+  name: string;
+  id?: string;
+};
 
 export type MetadataSubmit = {
   title: string;
   archivePath: string;
-  info: {
-    name: string;
-    id?: string;
-  };
+  info: PlatformInfo;
 };
 
-export const metadataDeployed = (metadata: GameMetadata | null) => {
+export type MetadataCreation = {
+  title: string;
+  fromPath: string;
+  info: PlatformInfo;
+  password?: string;
+};
+
+export const metadataDeployed = (metadata: Metadata | null) => {
   return metadata != null && metadata.deployed_path != null && metadata.deployed_path.length > 0;
 };
 
@@ -65,7 +74,7 @@ export const dashboardColumns: QTableColumn[] = [
   {
     name: "platform",
     label: "平台",
-    field: (row: GameMetadata) => {
+    field: (row: Metadata) => {
       if (!row.platform) {
         return "-";
       } else if (row.platform.platform === PlatformType.Other) {
@@ -111,7 +120,7 @@ export const dashboardColumns: QTableColumn[] = [
     name: "size",
     label: "大小",
     sortable: true,
-    field: (row: GameMetadata) => formatByteSize(row.size_bytes),
+    field: (row: Metadata) => formatByteSize(row.size_bytes),
   },
   {
     name: "archive_path",
@@ -126,7 +135,7 @@ export const dashboardColumns: QTableColumn[] = [
   {
     name: "tags",
     label: "标签",
-    field: (row: GameMetadata) => row.tags?.map((tag) => tag.name).join(", ") || "",
+    field: (row: Metadata) => row.tags?.map((tag) => tag.name).join(", ") || "",
   },
   {
     name: "date_created",

@@ -1,4 +1,4 @@
-export type GamePlatform = {
+export type Platform = {
   platform: string;
   id?: string;
 };
@@ -10,7 +10,7 @@ export enum PlatformType {
   Unknown = "Unknown",
 }
 
-export const createGamePlatform = (type: PlatformType, otherID?: string): GamePlatform => {
+export const createPlatform = (type: PlatformType, otherID?: string): Platform => {
   switch (type) {
     case PlatformType.Steam:
       return { platform: "Steam" };
@@ -23,16 +23,16 @@ export const createGamePlatform = (type: PlatformType, otherID?: string): GamePl
   }
 };
 
-export type GameTag = {
+export type Tag = {
   name: string;
   category?: string;
 };
 
-export type GameMetadata = {
+export type Metadata = {
   id: string;
   title: string;
   original_title?: string;
-  platform: GamePlatform;
+  platform: Platform;
   platform_id?: string;
 
   description?: string;
@@ -46,12 +46,12 @@ export type GameMetadata = {
   deployed_path?: string;
   size_bytes?: number;
 
-  tags?: GameTag[];
+  tags?: Tag[];
 
   date_created?: string;
   date_updated?: string;
 };
 
-export type GameLibrary = {
-  entries: GameMetadata[];
+export type Library = {
+  entries: Metadata[];
 };

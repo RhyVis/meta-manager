@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { openSelectFile, openSelectFolder } from "@/lib/api.ts";
-import { createGamePlatform, type GameMetadata, PlatformType } from "@/lib/bridge.ts";
+import { createPlatform, type Metadata, PlatformType } from "@/lib/bridge.ts";
 import { command_library_deploy, command_library_deploy_off } from "@/lib/command.ts";
 import {
   formatByteSize,
@@ -19,7 +19,7 @@ const { dialog, notify } = useQuasar();
 const libraryStore = useLibraryStore();
 
 const props = defineProps<{
-  metadata: GameMetadata | null;
+  metadata: Metadata | null;
 }>();
 const value = defineModel({
   type: Boolean,
@@ -27,7 +27,7 @@ const value = defineModel({
 });
 const emit = defineEmits<{
   delete: [id: string];
-  update: [metadata: GameMetadata];
+  update: [metadata: Metadata];
   close: [];
 }>();
 
@@ -37,7 +37,7 @@ const deployed = computed(() => {
   return metadataDeployed(props.metadata);
 });
 
-const editedData = ref<Partial<GameMetadata>>({});
+const editedData = ref<Partial<Metadata>>({});
 const editFields = ref({
   title: { state: false, cache: "" },
   original_title: { state: false, cache: "" },
@@ -55,16 +55,16 @@ const platformProxy = computed({
   set: (value) => {
     switch (value) {
       case "Steam":
-        editedData.value.platform = createGamePlatform(PlatformType.Steam);
+        editedData.value.platform = createPlatform(PlatformType.Steam);
         break;
       case "DLSite":
-        editedData.value.platform = createGamePlatform(PlatformType.DLSite);
+        editedData.value.platform = createPlatform(PlatformType.DLSite);
         break;
       case "Other":
-        editedData.value.platform = createGamePlatform(PlatformType.Other);
+        editedData.value.platform = createPlatform(PlatformType.Other);
         break;
       default:
-        editedData.value.platform = createGamePlatform(PlatformType.Unknown);
+        editedData.value.platform = createPlatform(PlatformType.Unknown);
         break;
     }
   },
@@ -146,6 +146,10 @@ const handleDeploy = async () => {
     }
 
     setLoading(true);
+    notify({
+      message: "部署中……",
+      position: "bottom-right",
+    });
     await command_library_deploy(props.metadata.id, selected);
     await libraryStore.getLibrary();
 
@@ -173,7 +177,7 @@ const handleDeployOff = async () => {
   try {
     dialog({
       title: "取消部署",
-      message: `确定要取消部署游戏 "${props.metadata.title}" 吗？该路径的文件夹将被清空！`,
+      message: `确定要取消部署 "${props.metadata.title}" 吗？该路径的文件夹将被清空！`,
       persistent: true,
       cancel: true,
     }).onOk(async () => {
@@ -211,7 +215,7 @@ const handleDelete = () => {
   if (!props.metadata) return;
   dialog({
     title: "删除记录",
-    message: `确定要删除游戏记录 "${props.metadata.title}" 吗？`,
+    message: `确定要删除元数据 "${props.metadata.title}" 吗？`,
     persistent: true,
     cancel: true,
   }).onOk(() => {
@@ -236,9 +240,9 @@ watch(
   <q-dialog v-model="value">
     <q-card style="min-width: 500px; max-width: 85vw">
       <q-card-section class="row items-center">
-        <div class="text-h6">游戏详情</div>
+        <div class="text-h6">元数据详情</div>
         <q-space />
-        <q-btn icon="close" flat round dense v-close-popup />
+        <q-btn v-close-popup icon="close" flat round dense />
       </q-card-section>
 
       <q-card-section>
@@ -256,10 +260,10 @@ watch(
             </q-field>
             <q-input
               v-else
+              v-model="editedData.title"
               dense
               stack-label
               label="标题"
-              v-model="editedData.title"
               @keyup.enter="toggleEditField('title')"
             >
               <template #append>
@@ -280,10 +284,10 @@ watch(
             </q-field>
             <q-input
               v-else
+              v-model="editedData.original_title"
               dense
               stack-label
               label="原始标题"
-              v-model="editedData.original_title"
               @keyup.enter="toggleEditField('original_title')"
             >
               <template #append>
@@ -303,7 +307,7 @@ watch(
               </template>
             </q-field>
             <template v-else>
-              <q-select :options="platformOptions" v-model="platformProxy" dense label="平台">
+              <q-select v-model="platformProxy" :options="platformOptions" dense label="平台">
                 <template #after>
                   <q-btn icon="check" flat round dense @click="toggleEditField('platform')" />
                   <q-btn icon="close" flat round dense @click="cancelEdit('platform')" />
@@ -330,10 +334,10 @@ watch(
             </q-field>
             <q-input
               v-else
+              v-model="editedData.platform_id"
               dense
               stack-label
               label="平台ID"
-              v-model="editedData.platform_id"
               @keyup.enter="toggleEditField('platform_id')"
             >
               <template #append>
@@ -358,12 +362,12 @@ watch(
             </q-input>
             <q-input
               v-else
+              v-model="editedData.description"
               dense
               stack-label
               autogrow
               type="textarea"
               label="描述"
-              v-model="editedData.description"
             >
               <template #append>
                 <q-btn icon="check" flat round dense @click="toggleEditField('description')" />
@@ -383,10 +387,10 @@ watch(
             </q-field>
             <q-input
               v-else
+              v-model="editedData.version"
               dense
               stack-label
               label="版本"
-              v-model="editedData.version"
               @keyup.enter="toggleEditField('version')"
             >
               <template #append>
@@ -407,10 +411,10 @@ watch(
             </q-field>
             <q-input
               v-else
+              v-model="editedData.developer"
               dense
               stack-label
               label="开发者"
-              v-model="editedData.developer"
               @keyup.enter="toggleEditField('developer')"
             >
               <template #append>
@@ -431,10 +435,10 @@ watch(
             </q-field>
             <q-input
               v-else
+              v-model="editedData.publisher"
               dense
               stack-label
               label="发行商"
-              v-model="editedData.publisher"
               @keyup.enter="toggleEditField('publisher')"
             >
               <template #append>
@@ -466,10 +470,10 @@ watch(
               <template #after>
                 <q-btn-dropdown flat dense icon="folder" no-caps>
                   <q-list dense>
-                    <q-item clickable v-close-popup @click="handleUpdateArchivePath(true)">
+                    <q-item v-close-popup clickable @click="handleUpdateArchivePath(true)">
                       <q-item-section>选择文件</q-item-section>
                     </q-item>
-                    <q-item clickable v-close-popup @click="handleUpdateArchivePath(false)">
+                    <q-item v-close-popup clickable @click="handleUpdateArchivePath(false)">
                       <q-item-section>选择文件夹</q-item-section>
                     </q-item>
                   </q-list>
@@ -489,10 +493,10 @@ watch(
             </q-field>
             <q-input
               v-else
+              v-model="editedData.archive_password"
               dense
               stack-label
               label="存档密码"
-              v-model="editedData.archive_password"
               @keyup.enter="toggleEditField('archive_password')"
             >
               <template #append>
@@ -510,7 +514,7 @@ watch(
                   {{ metadata.deployed_path || "未部署" }}
                 </div>
               </template>
-              <template #after v-if="metadata.deployed_path && metadata.deployed_path.length !== 0">
+              <template v-if="metadata.deployed_path && metadata.deployed_path.length !== 0" #after>
                 <q-btn icon="close" flat round dense @click="handleDeployOff">
                   <q-tooltip>取消部署</q-tooltip>
                 </q-btn>
@@ -562,17 +566,17 @@ watch(
                     <q-date v-model="editedData.release_date" minimal>
                       <div class="row items-center justify-end q-gutter-sm">
                         <q-btn
+                          v-close-popup
                           icon="close"
                           color="primary"
                           flat
-                          v-close-popup
                           @click="cancelEdit('release_date')"
                         />
                         <q-btn
+                          v-close-popup
                           icon="check"
                           color="primary"
                           flat
-                          v-close-popup
                           @click="toggleEditField('release_date')"
                         />
                       </div>
@@ -611,22 +615,22 @@ watch(
 
       <q-card-actions align="right">
         <q-btn
+          v-show="deployed"
           flat
           color="warning"
           icon="file_download_off"
           label="取消部署"
           :loading="loading"
-          v-show="deployed"
           @click="handleDeployOff"
         />
         <q-btn
+          v-show="!deployed"
           flat
           color="primary"
           icon="file_download"
           label="部署"
           :disable="!metadata?.archive_path"
           :loading="loading"
-          v-show="!deployed"
           @click="handleDeploy"
         />
         <q-btn

@@ -2,6 +2,7 @@ use crate::util::{file, flate};
 use bon::{Builder, builder};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use std::fs;
 use std::path::Path;
 use thiserror::Error;
@@ -15,6 +16,18 @@ pub enum Platform {
     Steam,
     DLSite,
     Other(String),
+}
+
+impl Display for Platform {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            Platform::Unknown => "Unknown".to_string(),
+            Platform::Steam => "Steam".to_string(),
+            Platform::DLSite => "DLSite".to_string(),
+            Platform::Other(name) => name.clone(),
+        };
+        write!(f, "{}", str)
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
@@ -83,7 +96,7 @@ impl Metadata {
         platform: Platform,
         platform_id: Option<String>,
         from_path: String,
-        target_path: String,
+        target_path: impl AsRef<Path>,
         password: Option<String>,
     ) -> Result<Self, MetadataError> {
         let from = Path::new(&from_path);
@@ -93,7 +106,19 @@ impl Metadata {
         }
 
         flate::compress_dir_to_7z(from_path, &target_path, password.as_deref(), Some(9))?;
-        Ok(Self::new(title, platform, platform_id, target_path))
+
+        let mut metadata = Self::new(
+            title,
+            platform,
+            platform_id,
+            target_path.as_ref().to_string_lossy().to_string(),
+        );
+        let _ = metadata.calculate_size();
+        if let Some(pwd) = password {
+            metadata.archive_password = Some(pwd);
+        }
+
+        Ok(metadata)
     }
 
     /// Calculate the size of the archive

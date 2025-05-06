@@ -17,7 +17,8 @@ pub fn run() {
             library_set,
             library_deploy,
             library_deploy_off,
-            metadata_add
+            metadata_add,
+            metadata_create
         ])
         .run(tauri::generate_context!())
         .expect("Initialization failed");

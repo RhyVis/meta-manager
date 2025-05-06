@@ -6,8 +6,8 @@ const [drawerOpen, setDrawerOpen] = useToggle(false);
 </script>
 
 <template>
-  <q-layout view="hHh Lpr lFf" id="main-layout">
-    <q-header elevated id="main-header">
+  <q-layout id="main-layout" view="hHh Lpr lFf">
+    <q-header id="main-header" elevated>
       <q-toolbar>
         <q-btn flat dense round icon="menu" aria-label="Menu" @click="setDrawerOpen()" />
         <q-toolbar-title><span> M.E.T.A. </span></q-toolbar-title>

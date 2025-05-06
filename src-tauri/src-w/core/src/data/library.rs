@@ -1,21 +1,57 @@
-use crate::data::metadata::{Metadata, MetadataError};
+use crate::data::metadata::{Metadata, MetadataError, Platform};
 use crate::foundation::config::get_clone as config_get_clone;
+use chrono::Utc;
 use redb::{Database, ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
 use thiserror::Error;
-use tracing::error;
+use tracing::{error, info};
 
 const LIB_FILE_NAME: &str = "library.redb";
+const LIB_FILE_STEM: &str = "library";
+const LIB_FILE_EXT: &str = "redb";
 const LIB_TABLE: TableDefinition<&str, Vec<u8>> = TableDefinition::new("LIBRARY");
+
+const ARCHIVE_DIR_NAME: &str = "archive";
+const BACKUP_DIR_NAME: &str = "backup";
 
 fn library() -> &'static Database {
     static LIBRARY: OnceLock<Database> = OnceLock::new();
+    fn backup(source_path: impl AsRef<Path>, backup_dir: impl AsRef<Path>) {
+        if source_path.as_ref().exists() {
+            if !backup_dir.as_ref().exists() {
+                fs::create_dir_all(&backup_dir).unwrap();
+            }
+            let backup_path = backup_dir.as_ref().join(format!(
+                "{LIB_FILE_STEM}-{}.{LIB_FILE_EXT}",
+                Utc::now().format("%Y%m%d-%H%M%S"),
+            ));
+            if let Err(e) = fs::copy(&source_path, &backup_path) {
+                error!("Failed to copy library to backup: {}", e);
+            } else {
+                info!("Library copied to backup: {}", backup_path.display());
+            }
+        }
+    }
     LIBRARY.get_or_init(|| {
-        let path = config_get_clone().unwrap().data_dir().join(LIB_FILE_NAME);
+        let data_dir = config_get_clone().unwrap().data_dir();
+        let path = data_dir.join(LIB_FILE_NAME);
+        backup(&path, data_dir.join(BACKUP_DIR_NAME));
         Database::create(path).unwrap()
     })
+}
+
+fn lib_internal_add_nocheck(metadata: Metadata) -> Result<(), LibraryError> {
+    let to_save = bson::to_vec(&metadata).map_err(LibraryError::SerializeError)?;
+    let write = library().begin_write()?;
+    {
+        let mut table = write.open_table(LIB_TABLE)?;
+        table.insert(metadata.id.as_str(), to_save)?;
+    }
+    write.commit()?;
+    Ok(())
 }
 
 pub fn lib_fresh() -> Result<(), LibraryError> {
@@ -58,29 +94,21 @@ pub fn lib_get_all() -> Result<Library, LibraryError> {
 }
 
 /// Adds a [Metadata] to the library
-pub fn lib_add(mut game: Metadata) -> Result<(), LibraryError> {
-    if let Ok(existed) = lib_get(&game.id) {
+pub fn lib_add(mut data: Metadata) -> Result<(), LibraryError> {
+    if let Ok(existed) = lib_get(&data.id) {
         // Update mode
-        if game.archive_path != existed.archive_path {
+        if data.archive_path != existed.archive_path {
             // Update size
-            let _ = game.calculate_size();
+            let _ = data.calculate_size();
         }
-        game.mark_updated();
+        data.mark_updated();
     }
-
-    let to_save = bson::to_vec(&game).map_err(LibraryError::SerializeError)?;
-    let write = library().begin_write()?;
-    {
-        let mut table = write.open_table(LIB_TABLE)?;
-        table.insert(game.id.as_str(), to_save)?;
-    }
-    write.commit()?;
-    Ok(())
+    lib_internal_add_nocheck(data)
 }
 
 /// No difference from [lib_add], just migration
-pub fn lib_rep(game: Metadata) -> Result<(), LibraryError> {
-    lib_add(game)
+pub fn lib_rep(data: Metadata) -> Result<(), LibraryError> {
+    lib_add(data)
 }
 
 /// Removes a [Metadata] from the library
@@ -92,6 +120,44 @@ pub fn lib_del(id: &str) -> Result<(), LibraryError> {
     }
     write.commit()?;
     Ok(())
+}
+
+pub fn lib_delegate_create(
+    title: String,
+    platform: Platform,
+    platform_id: Option<String>,
+    from_path: String,
+    password: Option<String>,
+) -> Result<(), LibraryError> {
+    let config = config_get_clone()?;
+    let path_to_dir = config
+        .data_dir()
+        .join(ARCHIVE_DIR_NAME)
+        .join(platform.to_string());
+    if !path_to_dir.exists() {
+        fs::create_dir_all(&path_to_dir)?;
+    }
+    let path_to_archive = path_to_dir.join(format!(
+        "{}.7z",
+        platform_id
+            .clone()
+            .take_if(|s| !s.is_empty())
+            .unwrap_or(Utc::now().format("ANONYMOUS-%Y%m%d-%H%M%S").to_string()),
+    ));
+
+    info!("Creating new archive at: {}", path_to_archive.display());
+
+    let metadata = Metadata::new_on_create_archive(
+        title,
+        platform,
+        platform_id,
+        from_path,
+        path_to_archive,
+        password,
+    )
+    .map_err(LibraryError::CreateError)?;
+
+    lib_internal_add_nocheck(metadata)
 }
 
 /// Get [Metadata] from the library and deploy it
@@ -139,6 +205,9 @@ pub enum LibraryError {
     #[error("Failed to parse library file: {0}")]
     ParseError(bson::de::Error),
 
+    #[error("Failed to create metadata entry: {0}")]
+    CreateError(MetadataError),
+
     #[error("Failed in deployment for {1}: {0}")]
     DeploymentError(MetadataError, String),
 
@@ -146,7 +215,7 @@ pub enum LibraryError {
     DeploymentOffError(MetadataError, String),
 
     #[error("Failed with config: {0}")]
-    ConfigError(crate::foundation::config::ConfigError),
+    ConfigError(#[from] crate::foundation::config::ConfigError),
 
     #[error("Failed in database opt: {0}")]
     TransactionError(#[from] redb::TransactionError),

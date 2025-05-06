@@ -1,10 +1,10 @@
-import type { GameLibrary } from "@/lib/bridge.ts";
+import type { Library } from "@/lib/bridge.ts";
 import { command_library_get } from "@/lib/command.ts";
 import { defineStore } from "pinia";
 import { Notify } from "quasar";
 
 interface LibraryState {
-  lib: GameLibrary | null;
+  lib: Library | null;
 }
 
 export const useLibraryStore = defineStore("library", {
@@ -16,7 +16,7 @@ export const useLibraryStore = defineStore("library", {
     size: (state) => state.lib?.entries.length ?? 0,
   },
   actions: {
-    update(lib: GameLibrary) {
+    update(lib: Library) {
       console.info("Updating library");
       this.lib = lib;
     },
@@ -32,7 +32,7 @@ export const useLibraryStore = defineStore("library", {
         console.error("Failed to get library", e);
         Notify.create({
           type: "negative",
-          message: "获取游戏库失败",
+          message: "获取库失败",
           caption: e as string,
         });
       }
@@ -45,7 +45,7 @@ export const useLibraryStore = defineStore("library", {
         console.error("Failed to reload library", e);
         Notify.create({
           type: "negative",
-          message: "刷新游戏库失败",
+          message: "刷新库失败",
           caption: e as string,
         });
       }

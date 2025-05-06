@@ -1,11 +1,14 @@
-import type { GameLibrary, GameMetadata } from "@/lib/bridge.ts";
-import type { MetadataSubmit } from "@/pages/manage/dashboard/script.ts";
+import type { Library, Metadata } from "@/lib/bridge.ts";
+import type {
+  MetadataCreation,
+  MetadataSubmit,
+  PlatformInfo,
+} from "@/pages/manage/dashboard/script.ts";
 import { invoke } from "@tauri-apps/api/core";
 
-export const command_library_get = async (): Promise<GameLibrary> => await invoke("library_get");
+export const command_library_get = async (): Promise<Library> => await invoke("library_get");
 
-export const command_library_set = async (data: GameMetadata) =>
-  await invoke("library_set", { data });
+export const command_library_set = async (data: Metadata) => await invoke("library_set", { data });
 
 export const command_library_del = async (id: string): Promise<boolean> =>
   invoke("library_del", { id });
@@ -18,3 +21,6 @@ export const command_library_deploy_off = async (id: string) =>
 
 export const command_metadata_add = async (data: MetadataSubmit) =>
   await invoke("metadata_add", data);
+
+export const command_metadata_create = async (data: MetadataCreation) =>
+  await invoke("metadata_create", data);
