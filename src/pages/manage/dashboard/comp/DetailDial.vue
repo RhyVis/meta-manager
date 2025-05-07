@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { openSelectFile, openSelectFolder } from "@/lib/api.ts";
-import { createPlatform, type Metadata, PlatformType } from "@/lib/bridge.ts";
+import {
+  ContentType,
+  contentTypeOptions,
+  createPlatform,
+  type Metadata,
+  PlatformType,
+} from "@/lib/bridge.ts";
 import { command_library_deploy, command_library_deploy_off } from "@/lib/command.ts";
 import {
   formatByteSize,
@@ -41,6 +47,7 @@ const editedData = ref<Partial<Metadata>>({});
 const editFields = ref({
   title: { state: false, cache: "" },
   original_title: { state: false, cache: "" },
+  content_type: { state: false, cache: ContentType.Unknown },
   platform: { state: false, cache: { platform: "Unknown", id: null } },
   platform_id: { state: false, cache: "" },
   description: { state: false, cache: "" },
@@ -295,6 +302,29 @@ watch(
                 <q-btn icon="close" flat round dense @click="cancelEdit('original_title')" />
               </template>
             </q-input>
+
+            <q-field v-if="!editFields.content_type.state" dense label="类型" stack-label>
+              <template #control>
+                <div class="self-center full-width no-outline">
+                  {{ metadata.content_type }}
+                </div>
+              </template>
+              <template #append>
+                <q-btn icon="edit" flat round dense @click="toggleEditField('content_type')" />
+              </template>
+            </q-field>
+            <q-select
+              v-else
+              v-model="editedData.content_type"
+              :options="contentTypeOptions"
+              dense
+              label="类型"
+            >
+              <template #after>
+                <q-btn icon="check" flat round dense @click="toggleEditField('content_type')" />
+                <q-btn icon="close" flat round dense @click="cancelEdit('content_type')" />
+              </template>
+            </q-select>
 
             <q-field v-if="!editFields.platform.state" dense label="平台" stack-label>
               <template #control>

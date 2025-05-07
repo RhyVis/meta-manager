@@ -10,6 +10,36 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
+pub enum ContentType {
+    Unknown,
+    Game,
+    Comic,
+    Novel,
+    Music,
+    Anime,
+}
+
+impl Display for ContentType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let str = match self {
+            ContentType::Unknown => "Unknown".to_string(),
+            ContentType::Game => "Game".to_string(),
+            ContentType::Comic => "Comic".to_string(),
+            ContentType::Novel => "Novel".to_string(),
+            ContentType::Music => "Music".to_string(),
+            ContentType::Anime => "Anime".to_string(),
+        };
+        write!(f, "{}", str)
+    }
+}
+
+impl Default for ContentType {
+    fn default() -> Self {
+        ContentType::Unknown
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 #[serde(tag = "platform", content = "id")]
 pub enum Platform {
     Unknown,
@@ -30,6 +60,12 @@ impl Display for Platform {
     }
 }
 
+impl Default for Platform {
+    fn default() -> Self {
+        Platform::Unknown
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub enum DeployType {
     Directory,
@@ -44,29 +80,62 @@ pub struct Tag {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq, Builder)]
 pub struct Metadata {
+    #[serde(default = "metadata_default_id")]
+    #[builder(default = metadata_default_id())]
     pub id: String,
+    #[serde(default)]
     pub title: String,
+    #[serde(default)]
     pub original_title: Option<String>,
+    #[serde(default)]
+    #[builder(default)]
+    pub content_type: ContentType,
+    #[serde(default)]
     pub platform: Platform,
+    #[serde(default)]
     pub platform_id: Option<String>,
 
+    #[serde(default)]
     pub description: Option<String>,
+    #[serde(default = "metadata_default_version")]
     pub version: Option<String>,
+    #[serde(default)]
     pub developer: Option<String>,
+    #[serde(default)]
     pub publisher: Option<String>,
+    #[serde(default)]
     pub release_date: Option<String>,
 
+    #[serde(default)]
     pub archive_path: Option<String>,
+    #[serde(default)]
     pub archive_password: Option<String>,
+    #[serde(default)]
     pub deployed_path: Option<String>,
+    #[serde(default)]
     pub deployed_type: Option<DeployType>,
+    #[serde(default)]
     pub size_bytes: Option<u64>,
 
+    #[serde(default)]
     #[builder(default)]
     pub tags: Vec<Tag>,
 
+    #[serde(default = "Utc::now")]
+    #[builder(default = Utc::now())]
     pub date_created: DateTime<Utc>,
+    #[serde(default = "Utc::now")]
+    #[builder(default = Utc::now())]
     pub date_updated: DateTime<Utc>,
+}
+
+fn metadata_default_id() -> String {
+    Uuid::new_v4().to_string()
+}
+
+fn metadata_default_version() -> Option<String> {
+    const VERSION_DEFAULT: &str = "1.0";
+    Some(VERSION_DEFAULT.to_string())
 }
 
 impl Metadata {
@@ -80,10 +149,7 @@ impl Metadata {
         let build = Self::builder()
             .title(title)
             .platform(platform)
-            .archive_path(archive_path)
-            .id(Uuid::new_v4().to_string())
-            .date_created(Utc::now())
-            .date_updated(Utc::now());
+            .archive_path(archive_path);
         if let Some(platform_id) = platform_id {
             build.platform_id(platform_id).build()
         } else {

@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::Path;
 use std::sync::OnceLock;
+use std::time::SystemTime;
 use thiserror::Error;
 use tracing::{error, info};
 
@@ -24,6 +25,29 @@ fn library() -> &'static Database {
             if !backup_dir.as_ref().exists() {
                 fs::create_dir_all(&backup_dir).unwrap();
             }
+
+            let mut backups: Vec<_> = fs::read_dir(&backup_dir)
+                .unwrap()
+                .filter_map(|entry| entry.ok())
+                .filter(|entry| entry.path().is_file())
+                .collect();
+
+            if backups.len() >= 4 {
+                backups.sort_by_key(|entry| {
+                    entry
+                        .metadata()
+                        .and_then(|m| m.modified())
+                        .unwrap_or_else(|_| SystemTime::UNIX_EPOCH)
+                });
+                if let Some(oldest) = backups.first() {
+                    if let Err(e) = fs::remove_file(oldest.path()) {
+                        error!("Failed to remove old backup: {}", e);
+                    } else {
+                        info!("Removed old backup: {}", oldest.path().display());
+                    }
+                }
+            }
+
             let backup_path = backup_dir.as_ref().join(format!(
                 "{LIB_FILE_STEM}-{}.{LIB_FILE_EXT}",
                 Utc::now().format("%Y%m%d-%H%M%S"),

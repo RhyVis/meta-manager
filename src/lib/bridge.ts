@@ -1,3 +1,14 @@
+export enum ContentType {
+  Unknown = "Unknown",
+  Game = "Game",
+  Comic = "Comic",
+  Novel = "Novel",
+  Music = "Music",
+  Anime = "Anime",
+}
+
+export const contentTypeOptions = Object.entries(ContentType).map(([key, _]) => key);
+
 export type Platform = {
   platform: string;
   id?: string;
@@ -32,6 +43,7 @@ export type Metadata = {
   id: string;
   title: string;
   original_title?: string;
+  content_type: ContentType;
   platform: Platform;
   platform_id?: string;
 

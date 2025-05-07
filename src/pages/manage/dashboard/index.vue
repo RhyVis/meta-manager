@@ -2,7 +2,7 @@
 import { type Metadata } from "@/lib/bridge.ts";
 import { command_library_del, command_library_set } from "@/lib/command.ts";
 import DetailDial from "@/pages/manage/dashboard/comp/DetailDial.vue";
-import { dashboardColumns, formatPath } from "@/pages/manage/dashboard/script.ts";
+import { dashboardColumns, formatByteSize, formatPath } from "@/pages/manage/dashboard/script.ts";
 import { useLibraryStore } from "@/stores/library.ts";
 import { set, useToggle } from "@vueuse/core";
 import { storeToRefs } from "pinia";
@@ -18,7 +18,14 @@ const [detailDialog, setDetailDialog] = useToggle(false);
 const detailMetadata = ref<Metadata | null>(null);
 
 const libraryStore = useLibraryStore();
-const visibleColumns = ref(["title", "platform", "size", "actions"]);
+const visibleColumns = ref([
+  "title",
+  "original_title",
+  "platform",
+  "platform_id",
+  "size",
+  "actions",
+]);
 const pagination = ref({ rowsPerPage: 10 });
 const { lib } = storeToRefs(libraryStore);
 
@@ -40,6 +47,11 @@ const filteredEntries = computed(() => {
     }) ?? []
   );
 });
+
+const totalSize = computed(() =>
+  formatByteSize(lib.value?.entries.map((e) => e.size_bytes ?? 0).reduce((a, b) => a + b, 0) ?? 0),
+);
+
 const handleOpenDetailDialog = (metadata: Metadata) => {
   console.log("Opening detail dialog for", metadata);
   set(detailMetadata, metadata);
@@ -132,15 +144,29 @@ onMounted(() => {
     </div>
 
     <!-- 操作按钮区域 -->
-    <div class="row q-mb-md q-gutter-md">
-      <q-btn
-        color="primary"
-        icon="refresh"
-        label="重载库"
-        :loading="loading"
-        @click="handleReload"
-      />
-      <q-btn color="secondary" icon="add" label="添加元数据" @click="setSubmitDialog(true)" />
+    <div class="row items-center q-mb-md q-gutter-md">
+      <div class="col-grow">
+        <q-btn-group push>
+          <q-btn
+            push
+            color="primary"
+            icon="refresh"
+            label="重载库"
+            :loading="loading"
+            @click="handleReload"
+          />
+          <q-btn
+            push
+            color="secondary"
+            icon="add"
+            label="添加元数据"
+            @click="setSubmitDialog(true)"
+          />
+        </q-btn-group>
+      </div>
+      <div class="col-auto">
+        <div class="text-subtitle2 r-no-sel">总空间：{{ totalSize }}</div>
+      </div>
     </div>
 
     <!-- 控制区域 -->
@@ -151,7 +177,7 @@ onMounted(() => {
         v-model="searchText"
         dense
         outlined
-        placeholder="搜索（标题、原始标题、平台ID、开发者、发行商）"
+        placeholder="搜索（标题、原始标题、平台、开发者、发行商）"
         clearable
       >
         <template v-slot:prepend>
