@@ -40,6 +40,10 @@ impl Default for AppConfig {
 }
 
 impl AppConfig {
+    pub fn data_dir_name(&self) -> String {
+        self.data_dir.clone()
+    }
+
     pub fn data_dir(&self) -> PathBuf {
         cd_with(&self.data_dir)
     }
@@ -158,4 +162,12 @@ pub fn get_clone() -> Result<AppConfig, ConfigError> {
             ConfigError::LockError
         })
         .map(|config| config.clone())
+}
+
+pub fn get_data_dir_name() -> Result<String, ConfigError> {
+    Ok(get_clone()?.data_dir_name())
+}
+
+pub fn get_data_dir() -> Result<PathBuf, ConfigError> {
+    Ok(get_clone()?.data_dir())
 }

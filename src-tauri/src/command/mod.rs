@@ -3,7 +3,7 @@ mod bridge;
 use crate::command::bridge::PlatformInfo;
 use m_core::data::library::{
     Library, lib_add, lib_del, lib_delegate_create, lib_delegate_deploy, lib_delegate_deploy_off,
-    lib_get_all,
+    lib_export, lib_get_all, lib_import,
 };
 use m_core::data::metadata::Metadata;
 use tauri::command;
@@ -38,6 +38,16 @@ pub fn library_del(id: String) -> Result<(), String> {
         error!(err_msg);
         err_msg
     })
+}
+
+#[command]
+pub fn library_export() -> Result<(), String> {
+    lib_export().map_err(|err| err.to_string())
+}
+
+#[command]
+pub fn library_import() -> Result<bool, String> {
+    lib_import().map_err(|err| err.to_string())
 }
 
 #[command]

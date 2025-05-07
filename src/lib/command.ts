@@ -19,6 +19,10 @@ export const command_library_deploy = async (id: string, path: string) =>
 export const command_library_deploy_off = async (id: string) =>
   await invoke("library_deploy_off", { id });
 
+export const command_library_export = async () => await invoke("library_export");
+
+export const command_library_import = async (): Promise<boolean> => await invoke("library_import");
+
 export const command_metadata_add = async (data: MetadataSubmit) =>
   await invoke("metadata_add", data);
 

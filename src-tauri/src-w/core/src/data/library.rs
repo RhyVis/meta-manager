@@ -1,5 +1,5 @@
 use crate::data::metadata::{Metadata, MetadataError, Platform};
-use crate::foundation::config::get_clone as config_get_clone;
+use crate::foundation::config::{get_clone as config_get_clone, get_data_dir};
 use chrono::Utc;
 use redb::{Database, ReadableTable, TableDefinition};
 use serde::{Deserialize, Serialize};
@@ -8,9 +8,10 @@ use std::path::Path;
 use std::sync::OnceLock;
 use std::time::SystemTime;
 use thiserror::Error;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 const LIB_FILE_NAME: &str = "library.redb";
+const LIB_FILE_EXPORT: &str = "library.json";
 const LIB_FILE_STEM: &str = "library";
 const LIB_FILE_EXT: &str = "redb";
 const LIB_TABLE: TableDefinition<&str, Vec<u8>> = TableDefinition::new("LIBRARY");
@@ -146,6 +147,43 @@ pub fn lib_del(id: &str) -> Result<(), LibraryError> {
     Ok(())
 }
 
+pub fn lib_export() -> Result<(), LibraryError> {
+    let all = lib_get_all()?;
+    let serialized = serde_json::to_string_pretty(&all)?;
+    let path = get_data_dir()?.join(LIB_FILE_EXPORT);
+    fs::write(&path, serialized)?;
+    info!("Library exported to: {}", path.display());
+    Ok(())
+}
+
+pub fn lib_import() -> Result<bool, LibraryError> {
+    let path = get_data_dir()?.join(LIB_FILE_EXPORT);
+    if !path.exists() || !path.is_file() {
+        warn!("Exported library file not exists: {}", path.display());
+        return Ok(false);
+    }
+    let lib = serde_json::from_str::<Library>(fs::read_to_string(&path)?.as_str())?;
+    info!(
+        "Trying to import {} entries from {}",
+        lib.entries.len(),
+        path.display()
+    );
+    let write = library().begin_write()?;
+    {
+        let mut table = write.open_table(LIB_TABLE)?;
+        for entry in lib.entries {
+            table.insert(
+                entry.id.as_str(),
+                &bson::to_vec(&entry).map_err(LibraryError::SerializeError)?,
+            )?;
+        }
+    }
+    write.commit()?;
+    info!("Library imported from: {}", path.display());
+
+    Ok(true)
+}
+
 pub fn lib_delegate_create(
     title: String,
     platform: Platform,
@@ -252,6 +290,9 @@ pub enum LibraryError {
 
     #[error("Failed to commit data: {0}")]
     CommitError(#[from] redb::CommitError),
+
+    #[error("Failed to export/import as JSON: {0}")]
+    JSONError(#[from] serde_json::Error),
 
     #[error("Failed to acquire lock")]
     LockError,

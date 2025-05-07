@@ -33,5 +33,12 @@ onMounted(() => {
         </div>
       </q-item-section>
     </q-item>
+
+    <q-item v-ripple clickable to="/config">
+      <q-item-section avatar>
+        <q-icon name="settings" />
+      </q-item-section>
+      <q-item-section>配置</q-item-section>
+    </q-item>
   </q-list>
 </template>

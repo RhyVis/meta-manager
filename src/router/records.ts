@@ -16,6 +16,11 @@ const records: RouteRecordRaw[] = [
         name: "dashboard",
         component: () => import("@/pages/manage/dashboard/index.vue"),
       },
+      {
+        path: "config",
+        name: "config",
+        component: () => import("@/pages/base/ConfigPage.vue"),
+      },
     ],
   },
 ];

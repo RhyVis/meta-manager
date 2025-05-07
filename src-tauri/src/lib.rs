@@ -17,6 +17,8 @@ pub fn run() {
             library_set,
             library_deploy,
             library_deploy_off,
+            library_export,
+            library_import,
             metadata_add,
             metadata_create
         ])

@@ -149,7 +149,8 @@ impl Metadata {
         let build = Self::builder()
             .title(title)
             .platform(platform)
-            .archive_path(archive_path);
+            .archive_path(archive_path)
+            .version(metadata_default_version().unwrap());
         if let Some(platform_id) = platform_id {
             build.platform_id(platform_id).build()
         } else {
