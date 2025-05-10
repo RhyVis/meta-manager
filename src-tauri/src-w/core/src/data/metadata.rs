@@ -98,7 +98,8 @@ pub struct Metadata {
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default = "metadata_default_version")]
-    pub version: Option<String>,
+    #[builder(default = metadata_default_version())]
+    pub version: String,
     #[serde(default)]
     pub developer: Option<String>,
     #[serde(default)]
@@ -133,9 +134,9 @@ fn metadata_default_id() -> String {
     Uuid::new_v4().to_string()
 }
 
-fn metadata_default_version() -> Option<String> {
+fn metadata_default_version() -> String {
     const VERSION_DEFAULT: &str = "1.0";
-    Some(VERSION_DEFAULT.to_string())
+    VERSION_DEFAULT.to_string()
 }
 
 impl Metadata {
