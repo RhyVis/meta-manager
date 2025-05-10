@@ -98,7 +98,8 @@ pub struct Metadata {
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default = "metadata_default_version")]
-    pub version: Option<String>,
+    #[builder(default = metadata_default_version())]
+    pub version: String,
     #[serde(default)]
     pub developer: Option<String>,
     #[serde(default)]
@@ -133,9 +134,9 @@ fn metadata_default_id() -> String {
     Uuid::new_v4().to_string()
 }
 
-fn metadata_default_version() -> Option<String> {
+fn metadata_default_version() -> String {
     const VERSION_DEFAULT: &str = "1.0";
-    Some(VERSION_DEFAULT.to_string())
+    VERSION_DEFAULT.to_string()
 }
 
 impl Metadata {
@@ -149,8 +150,7 @@ impl Metadata {
         let build = Self::builder()
             .title(title)
             .platform(platform)
-            .archive_path(archive_path)
-            .version(metadata_default_version().unwrap());
+            .archive_path(archive_path);
         if let Some(platform_id) = platform_id {
             build.platform_id(platform_id).build()
         } else {
@@ -172,7 +172,7 @@ impl Metadata {
             return Err(MetadataError::InvalidOrigin(from_path));
         }
 
-        flate::compress_dir_to_7z(from_path, &target_path, password.as_deref(), Some(9))
+        flate::compress_7z(from_path, &target_path, password.as_deref(), Some(9))
             .map_err(MetadataError::CompressionError)?;
 
         let mut metadata = Self::new(
@@ -366,14 +366,12 @@ impl Metadata {
                         archive_path.display(),
                         deploy_path.display()
                     );
-                    match &self.archive_password {
-                        Some(password) => {
-                            flate::extract_zip_decrypt(archive_path, deploy_path, password)
-                                .map_err(|e| MetadataError::DecompressionError(e.to_string()))?
-                        }
-                        None => flate::extract_zip(archive_path, deploy_path)
-                            .map_err(|e| MetadataError::DecompressionError(e.to_string()))?,
-                    }
+                    flate::decompress_zip(
+                        archive_path,
+                        deploy_path,
+                        self.archive_password.as_deref(),
+                    )
+                    .map_err(|e| MetadataError::DecompressionError(e.to_string()))?;
                     self.update_deployed_path(path.to_string(), DeployType::Directory);
                 }
                 "rar" => {
@@ -384,7 +382,7 @@ impl Metadata {
                         archive_path.display(),
                         deploy_path.display()
                     );
-                    flate::extract_rar(
+                    flate::decompress_rar(
                         archive_path,
                         deploy_path,
                         self.archive_password.as_deref(),
@@ -398,7 +396,7 @@ impl Metadata {
                         archive_path.display(),
                         deploy_path.display()
                     );
-                    flate::decompress_7z_to_dir(
+                    flate::decompress_7z(
                         archive_path,
                         deploy_path,
                         self.archive_password.as_deref(),
